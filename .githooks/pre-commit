@@ -1,0 +1,7 @@
+#!/bin/sh
+# Auto-increments the patch version in src/SosLan/SosLan.csproj on every commit.
+# Activated via: git config core.hooksPath .githooks
+
+repo_root="$(git rev-parse --show-toplevel)"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$repo_root/scripts/bump-version.ps1"
+exit $?

@@ -41,3 +41,13 @@ Les paramètres sont stockés par utilisateur dans :
 ```
 %APPDATA%\SosLan\settings.json
 ```
+
+## Versionnage automatique
+
+Le numéro de version (`<Version>` dans `src/SosLan/SosLan.csproj`, affiché en bas de la fenêtre Paramètres) est incrémenté automatiquement à chaque commit par un hook Git.
+
+Pour l'activer sur un nouveau clone du dépôt :
+
+```bash
+git config core.hooksPath .githooks
+```
