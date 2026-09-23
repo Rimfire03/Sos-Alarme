@@ -71,3 +71,4 @@ Chaque push sur `main` déclenche un workflow GitHub Actions ([.github/workflows
 3. publie une [release GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) taguée avec le numéro de version courant (`<Version>` dans le `.csproj`), avec l'installeur et les fichiers de mise à jour Velopack en pièces jointes.
 
 Aucune action manuelle n'est nécessaire : la version étant déjà incrémentée à chaque commit, chaque push produit une nouvelle release installable et détectable par les postes déjà installés.
+
