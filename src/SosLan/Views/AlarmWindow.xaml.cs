@@ -13,6 +13,7 @@ public partial class AlarmWindow : Window
     {
         InitializeComponent();
         MessageText.Text = $"Alerte en provenance de {senderName}";
+        TriggeredAtText.Text = $"Déclenchée le {DateTime.Now:dd/MM/yyyy à HH:mm:ss}";
 
         _soundPlayer = new AlarmSoundPlayer();
         _soundPlayer.Start();
@@ -21,7 +22,11 @@ public partial class AlarmWindow : Window
         {
             Interval = TimeSpan.FromSeconds(Math.Max(1, maxDurationSeconds))
         };
-        _maxDurationTimer.Tick += (_, _) => Close();
+        _maxDurationTimer.Tick += (_, _) =>
+        {
+            _soundPlayer.Stop();
+            _maxDurationTimer.Stop();
+        };
         _maxDurationTimer.Start();
     }
 
