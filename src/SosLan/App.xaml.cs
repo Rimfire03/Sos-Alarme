@@ -143,7 +143,7 @@ public partial class App : Application
     {
         Dispatcher.Invoke(() =>
         {
-            var alarmWindow = new AlarmWindow(senderName);
+            var alarmWindow = new AlarmWindow(senderName, _settings.MaxAlertDurationSeconds);
             alarmWindow.Show();
             alarmWindow.Activate();
         });

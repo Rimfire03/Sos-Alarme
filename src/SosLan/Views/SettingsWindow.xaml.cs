@@ -24,7 +24,8 @@ public partial class SettingsWindow : Window
             DisplayName = currentSettings.DisplayName,
             HotKey = currentSettings.HotKey,
             HoldDurationSeconds = currentSettings.HoldDurationSeconds,
-            Port = currentSettings.Port
+            Port = currentSettings.Port,
+            MaxAlertDurationSeconds = currentSettings.MaxAlertDurationSeconds
         };
 
         _selectedKey = _workingCopy.HotKey;
@@ -32,6 +33,7 @@ public partial class SettingsWindow : Window
         HotKeyBox.Text = _selectedKey.ToString();
         DurationBox.Text = _workingCopy.HoldDurationSeconds.ToString();
         PortBox.Text = _workingCopy.Port.ToString();
+        MaxAlertDurationBox.Text = _workingCopy.MaxAlertDurationSeconds.ToString();
         StartWithWindowsCheckBox.IsChecked = StartupService.IsEnabled();
 
         var version = Assembly.GetExecutingAssembly().GetName().Version;
@@ -71,6 +73,12 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        if (!int.TryParse(MaxAlertDurationBox.Text, out var maxAlertDuration) || maxAlertDuration <= 0)
+        {
+            ErrorText.Text = "La durée maximale du signal sonore doit être un nombre entier positif de secondes.";
+            return;
+        }
+
         StartupService.SetEnabled(StartWithWindowsCheckBox.IsChecked == true);
 
         Result = new AppSettings
@@ -78,7 +86,8 @@ public partial class SettingsWindow : Window
             DisplayName = displayName,
             HotKey = _selectedKey,
             HoldDurationSeconds = duration,
-            Port = port
+            Port = port,
+            MaxAlertDurationSeconds = maxAlertDuration
         };
 
         DialogResult = true;

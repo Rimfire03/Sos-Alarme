@@ -11,4 +11,6 @@ public class AppSettings
     public int HoldDurationSeconds { get; set; } = 5;
 
     public int Port { get; set; } = 51515;
+
+    public int MaxAlertDurationSeconds { get; set; } = 60;
 }

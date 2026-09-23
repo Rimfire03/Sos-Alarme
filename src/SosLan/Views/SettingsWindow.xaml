@@ -25,6 +25,9 @@
         <TextBlock Text="Port réseau (identique sur tous les postes)" Margin="0,0,0,4" />
         <TextBox x:Name="PortBox" Margin="0,0,0,12" />
 
+        <TextBlock Text="Durée maximale du signal sonore (secondes)" Margin="0,0,0,4" />
+        <TextBox x:Name="MaxAlertDurationBox" Margin="0,0,0,12" />
+
         <CheckBox x:Name="StartWithWindowsCheckBox"
                   Content="Démarrer automatiquement avec Windows"
                   Margin="0,0,0,12" />
