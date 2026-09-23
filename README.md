@@ -87,3 +87,4 @@ Chaque push sur `main` déclenche un workflow GitHub Actions ([.github/workflows
 
 Aucune action manuelle n'est nécessaire : la version étant déjà incrémentée à chaque commit, chaque push produit une nouvelle release installable et détectable par les postes déjà installés.
 
+
