@@ -51,6 +51,9 @@ jobs:
             --icon src/SosLan/cloche.ico `
             --packTitle "SOS-LAN" `
             --packAuthors "Tomline Prod and Co" `
+            --msi `
+            --instLocation Either `
+            --instLicense installer/CLUF.md `
             -r win-x64
 
       - name: Publish release and installer to GitHub

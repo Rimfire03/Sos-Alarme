@@ -19,6 +19,8 @@ public static class SettingsService
         Converters = { new JsonStringEnumConverter() }
     };
 
+    public static bool IsFirstRun => !File.Exists(FilePath);
+
     public static AppSettings Load()
     {
         try

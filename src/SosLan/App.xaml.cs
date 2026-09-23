@@ -36,7 +36,15 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        var isFirstRun = SettingsService.IsFirstRun;
         _settings = SettingsService.Load();
+
+        if (isFirstRun)
+        {
+            // Démarrage automatique avec Windows activé par défaut au tout premier lancement.
+            StartupService.SetEnabled(true);
+            SettingsService.Save(_settings);
+        }
 
         _networkService = new NetworkService(_instanceId)
         {
