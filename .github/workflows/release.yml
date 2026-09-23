@@ -55,6 +55,14 @@ jobs:
             --instLocation Either `
             --instLicense installer/CLUF.md `
             -r win-x64
+
+          # Le Setup.exe one-click n'est pas distribué : seul le MSI l'est.
+          # vpk a besoin de le générer pour construire le MSI, mais son
+          # entrée doit être retirée du manifeste avant l'upload, sans quoi
+          # "vpk upload github" échoue en cherchant un fichier qu'on a supprimé.
+          $assetsPath = "Releases/assets.win.json"
+          $assets = @((Get-Content $assetsPath -Raw | ConvertFrom-Json) | Where-Object { $_.Type -ne "Installer" })
+          $assets | ConvertTo-Json | Set-Content -Path $assetsPath -Encoding utf8 -NoNewline
           Remove-Item "Releases/SosLan-win-Setup.exe" -Force
 
       - name: Publish release and installer to GitHub
