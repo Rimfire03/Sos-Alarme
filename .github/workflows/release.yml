@@ -55,6 +55,7 @@ jobs:
             --instLocation Either `
             --instLicense installer/CLUF.md `
             -r win-x64
+          Remove-Item "Releases/SosLan-win-Setup.exe" -Force
 
       - name: Publish release and installer to GitHub
         shell: pwsh

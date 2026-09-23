@@ -176,40 +176,51 @@ public partial class App : Application
 
     private async Task CheckForUpdatesAsync(bool silent)
     {
-        var outcome = await _updateService.CheckAndApplyAsync();
+        var (outcome, version) = await _updateService.CheckAsync();
 
-        Dispatcher.Invoke(() =>
+        switch (outcome)
         {
-            switch (outcome)
-            {
-                case UpdateService.Outcome.NotInstalled:
-                    if (!silent)
-                    {
-                        _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN",
-                            "Mise à jour indisponible : l'application ne semble pas provenir d'une installation officielle.",
-                            Forms.ToolTipIcon.Warning);
-                    }
-                    break;
+            case UpdateService.CheckOutcome.NotInstalled:
+                if (!silent)
+                {
+                    _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN",
+                        "Mise à jour indisponible : l'application ne semble pas provenir d'une installation officielle.",
+                        Forms.ToolTipIcon.Warning);
+                }
+                break;
 
-                case UpdateService.Outcome.UpToDate:
-                    if (!silent)
-                    {
-                        _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Vous utilisez déjà la dernière version.", Forms.ToolTipIcon.Info);
-                    }
-                    break;
+            case UpdateService.CheckOutcome.UpToDate:
+                if (!silent)
+                {
+                    _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Vous utilisez déjà la dernière version.", Forms.ToolTipIcon.Info);
+                }
+                break;
 
-                case UpdateService.Outcome.Updated:
-                    _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Mise à jour installée, redémarrage...", Forms.ToolTipIcon.Info);
-                    break;
+            case UpdateService.CheckOutcome.UpdateAvailable:
+                var result = System.Windows.MessageBox.Show(
+                    $"Une nouvelle version de SOS-LAN est disponible (v{version}).\n\nInstaller la mise à jour maintenant ? L'application redémarrera automatiquement.",
+                    "Mise à jour disponible",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
 
-                case UpdateService.Outcome.Failed:
-                    if (!silent)
+                if (result == MessageBoxResult.Yes)
+                {
+                    _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Téléchargement de la mise à jour en cours...", Forms.ToolTipIcon.Info);
+                    var applied = await _updateService.DownloadAndApplyAsync();
+                    if (!applied)
                     {
-                        _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Échec de la vérification des mises à jour.", Forms.ToolTipIcon.Error);
+                        _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Échec de l'installation de la mise à jour.", Forms.ToolTipIcon.Error);
                     }
-                    break;
-            }
-        });
+                }
+                break;
+
+            case UpdateService.CheckOutcome.Failed:
+                if (!silent)
+                {
+                    _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Échec de la vérification des mises à jour.", Forms.ToolTipIcon.Error);
+                }
+                break;
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

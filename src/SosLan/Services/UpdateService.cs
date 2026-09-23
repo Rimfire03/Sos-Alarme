@@ -6,44 +6,70 @@ namespace SosLan.Services;
 /// <summary>
 /// Vérifie, télécharge et applique les mises à jour publiées sur les releases GitHub du dépôt,
 /// via Velopack. Sans effet si l'application ne tourne pas depuis une installation Velopack
-/// (ex. lancement en développement via dotnet run).
+/// (ex. lancement en développement via dotnet run). Le téléchargement et l'application de la
+/// mise à jour ne se font qu'après confirmation explicite de l'appelant (voir DownloadAndApplyAsync).
 /// </summary>
 public class UpdateService
 {
     private const string RepoUrl = "https://github.com/Rimfire03/Sos-Alarme";
 
-    public enum Outcome
+    private UpdateManager? _manager;
+    private UpdateInfo? _pendingUpdate;
+
+    public enum CheckOutcome
     {
         NotInstalled,
         UpToDate,
-        Updated,
+        UpdateAvailable,
         Failed
     }
 
-    public async Task<Outcome> CheckAndApplyAsync()
+    public async Task<(CheckOutcome Outcome, string? Version)> CheckAsync()
     {
-        var manager = new UpdateManager(new GithubSource(RepoUrl, null, false));
+        _manager = new UpdateManager(new GithubSource(RepoUrl, null, false));
 
-        if (!manager.IsInstalled)
+        if (!_manager.IsInstalled)
         {
-            return Outcome.NotInstalled;
+            return (CheckOutcome.NotInstalled, null);
         }
 
         try
         {
-            var newVersion = await manager.CheckForUpdatesAsync();
+            var newVersion = await _manager.CheckForUpdatesAsync();
             if (newVersion == null)
             {
-                return Outcome.UpToDate;
+                return (CheckOutcome.UpToDate, null);
             }
 
-            await manager.DownloadUpdatesAsync(newVersion);
-            manager.ApplyUpdatesAndRestart(newVersion);
-            return Outcome.Updated;
+            _pendingUpdate = newVersion;
+            return (CheckOutcome.UpdateAvailable, newVersion.TargetFullRelease.Version.ToString());
         }
         catch
         {
-            return Outcome.Failed;
+            return (CheckOutcome.Failed, null);
+        }
+    }
+
+    /// <summary>
+    /// Télécharge et applique la mise à jour détectée par le dernier appel à CheckAsync, puis
+    /// redémarre l'application. Ne doit être appelé qu'après confirmation de l'utilisateur.
+    /// </summary>
+    public async Task<bool> DownloadAndApplyAsync()
+    {
+        if (_manager == null || _pendingUpdate == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            await _manager.DownloadUpdatesAsync(_pendingUpdate);
+            _manager.ApplyUpdatesAndRestart(_pendingUpdate);
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 }

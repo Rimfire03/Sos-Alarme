@@ -55,28 +55,35 @@ git config core.hooksPath .githooks
 
 ## Installation et mises à jour
 
-L'application se distribue sous deux formes générées par [Velopack](https://velopack.io/) :
+L'application se distribue sous forme d'un installeur **`SosLan-win.msi`** (Windows Installer, généré par [Velopack](https://velopack.io/)), qui :
 
-- **`SosLan-win-Setup.exe`** : installeur one-click, installe dans `%LOCALAPPDATA%\SosLan` (sans choix de dossier ni licence à valider).
-- **`SosLan-win.msi`** : installeur Windows Installer classique, qui demande à l'utilisateur d'**accepter le CLUF** ([installer/CLUF.md](installer/CLUF.md)) et de **choisir le dossier d'installation** avant de procéder.
+- demande à l'utilisateur d'**accepter le CLUF** ([installer/CLUF.md](installer/CLUF.md)) avant de continuer ;
+- laisse l'utilisateur **choisir le dossier d'installation** (page « Change... », par défaut `C:\Program Files\SosLan`) ;
+- crée les raccourcis Bureau et menu Démarrer, et enregistre une entrée standard dans **Programmes et fonctionnalités** (désinstallation via Windows, aucun outil supplémentaire requis) ;
+- lance l'application en fin d'installation.
 
-Dans les deux cas :
+Après installation :
 
-- des raccourcis Bureau et menu Démarrer sont créés, et l'application est lancée en fin d'installation ;
 - le démarrage automatique avec Windows est **activé par défaut** au premier lancement (modifiable ensuite dans les Paramètres) ;
-- au démarrage, l'application vérifie silencieusement s'il existe une nouvelle version publiée sur les [releases GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) ; si oui, elle la télécharge, l'installe et redémarre automatiquement ;
+- au démarrage, l'application vérifie silencieusement s'il existe une nouvelle version publiée sur les [releases GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) ; si oui, une **boîte de dialogue demande confirmation** avant de télécharger et d'installer la mise à jour (puis l'application redémarre automatiquement) ;
 - une vérification manuelle est aussi disponible via le menu **Vérifier les mises à jour** de l'icône de la zone de notification ;
-- la mise à jour automatique ne fonctionne que pour une installation faite via l'un de ces installeurs (pas pour un lancement via `dotnet run` ou un exécutable copié à la main).
+- la mise à jour automatique ne fonctionne que pour une installation faite via `SosLan-win.msi` (pas pour un lancement via `dotnet run` ou un exécutable copié à la main).
 
 Le CLUF ([installer/CLUF.md](installer/CLUF.md)) précise notamment que le Logiciel est la propriété de **Tomline Prod&Co** et qu'**aucun usage commercial n'est autorisé**.
+
+Pour une installation silencieuse scriptée (déploiement de parc), le dossier peut être imposé via la propriété `VELOPACK_INSTALLDIR` :
+
+```bash
+msiexec /i SosLan-win.msi /qn VELOPACK_INSTALLDIR="D:\Applications\SosLan"
+```
 
 ## Releases automatiques
 
 Chaque push sur `main` déclenche un workflow GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)) qui :
 
 1. compile l'application (self-contained, win-x64) ;
-2. la package avec `vpk` en installeurs Velopack (`SosLan-win-Setup.exe` et `SosLan-win.msi`) ;
-3. publie une [release GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) taguée avec le numéro de version courant (`<Version>` dans le `.csproj`), avec les installeurs et les fichiers de mise à jour Velopack en pièces jointes.
+2. la package avec `vpk` en installeur Velopack (`SosLan-win.msi`) ;
+3. publie une [release GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) taguée avec le numéro de version courant (`<Version>` dans le `.csproj`), avec l'installeur et les fichiers de mise à jour Velopack en pièces jointes.
 
 Aucune action manuelle n'est nécessaire : la version étant déjà incrémentée à chaque commit, chaque push produit une nouvelle release installable et détectable par les postes déjà installés.
 
