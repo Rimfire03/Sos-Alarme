@@ -24,7 +24,10 @@ public partial class App : Application
 
         _settings = SettingsService.Load();
 
-        _networkService = new NetworkService(_instanceId);
+        _networkService = new NetworkService(_instanceId)
+        {
+            DisplayName = _settings.DisplayName
+        };
         _networkService.AlarmReceived += OnAlarmReceived;
         _networkService.Start(_settings.Port);
 
@@ -48,6 +51,12 @@ public partial class App : Application
         }
 
         var menu = new Forms.ContextMenuStrip();
+
+        var peersMenuItem = new Forms.ToolStripMenuItem("Postes détectés sur le réseau");
+        peersMenuItem.DropDownOpening += (_, _) => RefreshPeersMenu(peersMenuItem);
+        menu.Items.Add(peersMenuItem);
+
+        menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Paramètres...", null, (_, _) => OpenSettings());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quitter", null, (_, _) => Shutdown());
@@ -63,6 +72,25 @@ public partial class App : Application
         _notifyIcon.DoubleClick += (_, _) => OpenSettings();
     }
 
+    private void RefreshPeersMenu(Forms.ToolStripMenuItem parentItem)
+    {
+        parentItem.DropDownItems.Clear();
+
+        var peers = _networkService?.GetActivePeers() ?? Array.Empty<(string Name, TimeSpan LastSeenAgo)>();
+
+        if (peers.Count == 0)
+        {
+            parentItem.DropDownItems.Add(new Forms.ToolStripMenuItem("Aucun poste détecté") { Enabled = false });
+            return;
+        }
+
+        foreach (var peer in peers)
+        {
+            var secondsAgo = (int)peer.LastSeenAgo.TotalSeconds;
+            parentItem.DropDownItems.Add(new Forms.ToolStripMenuItem($"{peer.Name} (vu il y a {secondsAgo}s)") { Enabled = false });
+        }
+    }
+
     private void OpenSettings()
     {
         var window = new SettingsWindow(_settings)
@@ -76,7 +104,11 @@ public partial class App : Application
             SettingsService.Save(_settings);
 
             _hotkeyMonitor?.UpdateTarget(_settings.HotKey, _settings.HoldDurationSeconds);
-            _networkService?.Start(_settings.Port);
+            if (_networkService != null)
+            {
+                _networkService.DisplayName = _settings.DisplayName;
+                _networkService.Start(_settings.Port);
+            }
         }
     }
 

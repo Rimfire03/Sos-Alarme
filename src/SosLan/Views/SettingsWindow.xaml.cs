@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using SosLan.Models;
+using SosLan.Services;
 using Forms = System.Windows.Forms;
 
 namespace SosLan.Views;
@@ -30,6 +31,7 @@ public partial class SettingsWindow : Window
         HotKeyBox.Text = _selectedKey.ToString();
         DurationBox.Text = _workingCopy.HoldDurationSeconds.ToString();
         PortBox.Text = _workingCopy.Port.ToString();
+        StartWithWindowsCheckBox.IsChecked = StartupService.IsEnabled();
     }
 
     private void OnHotKeyPreviewKeyDown(object sender, KeyEventArgs e)
@@ -64,6 +66,8 @@ public partial class SettingsWindow : Window
             ErrorText.Text = "Le port doit être compris entre 1024 et 65535.";
             return;
         }
+
+        StartupService.SetEnabled(StartWithWindowsCheckBox.IsChecked == true);
 
         Result = new AppSettings
         {

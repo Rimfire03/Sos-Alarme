@@ -1,44 +1,42 @@
-﻿<Window x:Class="SosLan.Views.SettingsWindow"
+<Window x:Class="SosLan.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Paramètres - SOS-LAN"
-        Height="320" Width="380"
+        Width="380"
+        SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         ShowInTaskbar="True">
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <StackPanel Margin="16">
+        <TextBlock Text="Nom affiché sur le réseau" Margin="0,0,0,4" />
+        <TextBox x:Name="DisplayNameBox" Margin="0,0,0,12" />
 
-        <TextBlock Grid.Row="0" Text="Nom affiché sur le réseau" Margin="0,0,0,4" />
-        <TextBox Grid.Row="0" x:Name="DisplayNameBox" Margin="0,22,0,0" />
-
-        <TextBlock Grid.Row="1" Text="Touche déclenchant l'alerte" Margin="0,16,0,4" />
-        <TextBox Grid.Row="1" x:Name="HotKeyBox"
-                 Margin="0,38,0,0"
+        <TextBlock Text="Touche déclenchant l'alerte" Margin="0,0,0,4" />
+        <TextBox x:Name="HotKeyBox"
                  IsReadOnly="True"
                  Focusable="True"
                  Text="Cliquez ici puis appuyez sur une touche"
-                 PreviewKeyDown="OnHotKeyPreviewKeyDown" />
+                 PreviewKeyDown="OnHotKeyPreviewKeyDown"
+                 Margin="0,0,0,12" />
 
-        <TextBlock Grid.Row="2" Text="Durée de l'appui requise (secondes)" Margin="0,16,0,4" />
-        <TextBox Grid.Row="2" x:Name="DurationBox" Margin="0,38,0,0" />
+        <TextBlock Text="Durée de l'appui requise (secondes)" Margin="0,0,0,4" />
+        <TextBox x:Name="DurationBox" Margin="0,0,0,12" />
 
-        <TextBlock Grid.Row="3" Text="Port réseau (identique sur tous les postes)" Margin="0,16,0,4" />
-        <TextBox Grid.Row="3" x:Name="PortBox" Margin="0,38,0,0" />
+        <TextBlock Text="Port réseau (identique sur tous les postes)" Margin="0,0,0,4" />
+        <TextBox x:Name="PortBox" Margin="0,0,0,12" />
 
-        <TextBlock Grid.Row="4" x:Name="ErrorText" Foreground="Red" Margin="0,10,0,0" TextWrapping="Wrap" />
+        <CheckBox x:Name="StartWithWindowsCheckBox"
+                  Content="Démarrer automatiquement avec Windows"
+                  Margin="0,0,0,12" />
 
-        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+        <TextBlock x:Name="ErrorText"
+                   Foreground="Red"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,12" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Annuler" Padding="16,6" Margin="0,0,8,0" Click="OnCancelClick" />
             <Button Content="Enregistrer" Padding="16,6" Click="OnSaveClick" IsDefault="True" />
         </StackPanel>
-    </Grid>
+    </StackPanel>
 </Window>
