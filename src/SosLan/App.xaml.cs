@@ -183,16 +183,22 @@ public partial class App : Application
             case UpdateService.CheckOutcome.NotInstalled:
                 if (!silent)
                 {
-                    _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN",
-                        "Mise à jour indisponible : l'application ne semble pas provenir d'une installation officielle.",
-                        Forms.ToolTipIcon.Warning);
+                    System.Windows.MessageBox.Show(
+                        "Mise à jour indisponible : l'application ne semble pas provenir d'une installation officielle (SosLan-win.msi).",
+                        "Mise à jour",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
                 }
                 break;
 
             case UpdateService.CheckOutcome.UpToDate:
                 if (!silent)
                 {
-                    _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Vous utilisez déjà la dernière version.", Forms.ToolTipIcon.Info);
+                    System.Windows.MessageBox.Show(
+                        "Vous possédez déjà la dernière version de SOS-LAN.",
+                        "Mise à jour",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
                 }
                 break;
 
@@ -217,7 +223,11 @@ public partial class App : Application
             case UpdateService.CheckOutcome.Failed:
                 if (!silent)
                 {
-                    _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Échec de la vérification des mises à jour.", Forms.ToolTipIcon.Error);
+                    System.Windows.MessageBox.Show(
+                        "Échec de la vérification des mises à jour. Vérifiez votre connexion réseau et réessayez.",
+                        "Mise à jour",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
                 }
                 break;
         }
