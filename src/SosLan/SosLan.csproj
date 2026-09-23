@@ -11,6 +11,9 @@
     <RootNamespace>SosLan</RootNamespace>
     <StartupObject>SosLan.App</StartupObject>
     <ApplicationIcon>cloche.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Product>SOS-LAN</Product>
+    <Copyright>© Tomline Prod&amp;Co</Copyright>
   </PropertyGroup>
 
   <ItemGroup>

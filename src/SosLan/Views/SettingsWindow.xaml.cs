@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
@@ -32,6 +33,9 @@ public partial class SettingsWindow : Window
         DurationBox.Text = _workingCopy.HoldDurationSeconds.ToString();
         PortBox.Text = _workingCopy.Port.ToString();
         StartWithWindowsCheckBox.IsChecked = StartupService.IsEnabled();
+
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        VersionText.Text = $"SOS-LAN v{version?.Major}.{version?.Minor}.{version?.Build} — © Tomline Prod&Co";
     }
 
     private void OnHotKeyPreviewKeyDown(object sender, KeyEventArgs e)

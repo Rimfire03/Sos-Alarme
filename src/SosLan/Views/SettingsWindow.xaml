@@ -38,5 +38,11 @@
             <Button Content="Annuler" Padding="16,6" Margin="0,0,8,0" Click="OnCancelClick" />
             <Button Content="Enregistrer" Padding="16,6" Click="OnSaveClick" IsDefault="True" />
         </StackPanel>
+
+        <TextBlock x:Name="VersionText"
+                   Margin="0,16,0,0"
+                   FontSize="11"
+                   Foreground="Gray"
+                   HorizontalAlignment="Center" />
     </StackPanel>
 </Window>
