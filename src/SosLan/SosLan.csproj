@@ -10,6 +10,11 @@
     <AssemblyName>SosLan</AssemblyName>
     <RootNamespace>SosLan</RootNamespace>
     <StartupObject>SosLan.App</StartupObject>
+    <ApplicationIcon>cloche.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="cloche.ico" LogicalName="SosLan.cloche.ico" />
+  </ItemGroup>
 
 </Project>

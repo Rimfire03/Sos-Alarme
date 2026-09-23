@@ -40,15 +40,7 @@ public partial class App : Application
 
     private void SetupNotifyIcon()
     {
-        Icon icon;
-        try
-        {
-            icon = Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location) ?? SystemIcons.Application;
-        }
-        catch
-        {
-            icon = SystemIcons.Application;
-        }
+        var icon = LoadAppIcon();
 
         var menu = new Forms.ContextMenuStrip();
 
@@ -70,6 +62,32 @@ public partial class App : Application
         };
 
         _notifyIcon.DoubleClick += (_, _) => OpenSettings();
+    }
+
+    private static Icon LoadAppIcon()
+    {
+        try
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            using var stream = assembly.GetManifestResourceStream("SosLan.cloche.ico");
+            if (stream != null)
+            {
+                return new Icon(stream);
+            }
+        }
+        catch
+        {
+            // Retombe sur l'icône associée à l'exécutable, puis l'icône système par défaut.
+        }
+
+        try
+        {
+            return Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location) ?? SystemIcons.Application;
+        }
+        catch
+        {
+            return SystemIcons.Application;
+        }
     }
 
     private void RefreshPeersMenu(Forms.ToolStripMenuItem parentItem)
