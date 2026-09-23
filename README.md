@@ -51,3 +51,12 @@ Pour l'activer sur un nouveau clone du dépôt :
 ```bash
 git config core.hooksPath .githooks
 ```
+
+## Releases automatiques
+
+Chaque push sur `main` déclenche un workflow GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)) qui :
+
+1. compile un exécutable autonome (`SosLan.exe`, self-contained, single-file) ;
+2. publie une [release GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) taguée avec le numéro de version courant (`<Version>` dans le `.csproj`), avec l'exe en pièce jointe.
+
+Aucune action manuelle n'est nécessaire : la version étant déjà incrémentée à chaque commit, chaque push produit une nouvelle release.
