@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Reflection;
 using System.Windows;
+using Application = System.Windows.Application;
 using SosLan.Models;
 using SosLan.Services;
 using SosLan.Views;
