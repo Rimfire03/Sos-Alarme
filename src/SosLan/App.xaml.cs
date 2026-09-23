@@ -5,6 +5,7 @@ using Application = System.Windows.Application;
 using SosLan.Models;
 using SosLan.Services;
 using SosLan.Views;
+using Velopack;
 using Forms = System.Windows.Forms;
 
 namespace SosLan;
@@ -12,11 +13,24 @@ namespace SosLan;
 public partial class App : Application
 {
     private readonly Guid _instanceId = Guid.NewGuid();
+    private readonly UpdateService _updateService = new();
 
     private AppSettings _settings = new();
     private Forms.NotifyIcon? _notifyIcon;
     private HotkeyMonitor? _hotkeyMonitor;
     private NetworkService? _networkService;
+
+    [STAThread]
+    public static void Main(string[] args)
+    {
+        // Doit s'exécuter avant tout le reste : gère les évènements d'installation/désinstallation
+        // Velopack (création de raccourcis, etc.) lors du premier lancement post-installation.
+        VelopackApp.Build().Run();
+
+        var app = new App();
+        app.InitializeComponent();
+        app.Run();
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -36,6 +50,8 @@ public partial class App : Application
         _hotkeyMonitor.Start(_settings.HotKey, _settings.HoldDurationSeconds);
 
         SetupNotifyIcon();
+
+        _ = CheckForUpdatesAsync(silent: true);
     }
 
     private void SetupNotifyIcon()
@@ -50,6 +66,7 @@ public partial class App : Application
 
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Paramètres...", null, (_, _) => OpenSettings());
+        menu.Items.Add("Vérifier les mises à jour", null, async (_, _) => await CheckForUpdatesAsync(silent: false));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quitter", null, (_, _) => Shutdown());
 
@@ -146,6 +163,44 @@ public partial class App : Application
             var alarmWindow = new AlarmWindow(senderName, _settings.MaxAlertDurationSeconds);
             alarmWindow.Show();
             alarmWindow.Activate();
+        });
+    }
+
+    private async Task CheckForUpdatesAsync(bool silent)
+    {
+        var outcome = await _updateService.CheckAndApplyAsync();
+
+        Dispatcher.Invoke(() =>
+        {
+            switch (outcome)
+            {
+                case UpdateService.Outcome.NotInstalled:
+                    if (!silent)
+                    {
+                        _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN",
+                            "Mise à jour indisponible : l'application ne semble pas provenir d'une installation officielle.",
+                            Forms.ToolTipIcon.Warning);
+                    }
+                    break;
+
+                case UpdateService.Outcome.UpToDate:
+                    if (!silent)
+                    {
+                        _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Vous utilisez déjà la dernière version.", Forms.ToolTipIcon.Info);
+                    }
+                    break;
+
+                case UpdateService.Outcome.Updated:
+                    _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Mise à jour installée, redémarrage...", Forms.ToolTipIcon.Info);
+                    break;
+
+                case UpdateService.Outcome.Failed:
+                    if (!silent)
+                    {
+                        _notifyIcon?.ShowBalloonTip(3000, "SOS-LAN", "Échec de la vérification des mises à jour.", Forms.ToolTipIcon.Error);
+                    }
+                    break;
+            }
         });
     }
 

@@ -11,13 +11,28 @@
     <RootNamespace>SosLan</RootNamespace>
     <StartupObject>SosLan.App</StartupObject>
     <ApplicationIcon>cloche.ico</ApplicationIcon>
-    <Version>1.0.4</Version>
+    <Version>1.0.5</Version>
     <Product>SOS-LAN</Product>
     <Copyright>© Tomline Prod&amp;Co</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="cloche.ico" LogicalName="SosLan.cloche.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.158" />
+  </ItemGroup>
+
+  <!-- Velopack needs to run at the very start of Main(), before the WPF Application
+       is constructed, so App.xaml can no longer auto-generate Main() as the
+       ApplicationDefinition entry point: it becomes a plain Page, and App.xaml.cs
+       declares its own static Main(). -->
+  <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
 
 </Project>

@@ -23,10 +23,11 @@ dotnet build
 dotnet run --project src/SosLan/SosLan.csproj
 ```
 
-Pour un exécutable autonome (sans installer le runtime .NET sur le poste cible) :
+Pour générer localement l'installeur (nécessite l'outil `vpk`, voir [Installation et mises à jour](#installation-et-mises-à-jour)) :
 
 ```bash
-dotnet publish src/SosLan/SosLan.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish src/SosLan/SosLan.csproj -c Release -r win-x64 --self-contained true -p:DebugType=None -o publish
+vpk pack -u SosLan -v <version> -p publish -e SosLan.exe --icon src/SosLan/cloche.ico --packTitle "SOS-LAN" --packAuthors "Tomline Prod and Co" -r win-x64
 ```
 
 ## Réseau
@@ -52,11 +53,21 @@ Pour l'activer sur un nouveau clone du dépôt :
 git config core.hooksPath .githooks
 ```
 
+## Installation et mises à jour
+
+L'application se distribue sous forme d'**installeur** (`SosLan-win-Setup.exe`), généré par [Velopack](https://velopack.io/), et non plus d'un simple exécutable :
+
+- l'installeur installe l'application dans `%LOCALAPPDATA%\SosLan`, crée les raccourcis Bureau et menu Démarrer, puis lance l'application ;
+- au démarrage, l'application vérifie silencieusement s'il existe une nouvelle version publiée sur les [releases GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) ; si oui, elle la télécharge, l'installe et redémarre automatiquement ;
+- une vérification manuelle est aussi disponible via le menu **Vérifier les mises à jour** de l'icône de la zone de notification ;
+- la mise à jour automatique ne fonctionne que pour une installation faite via `SosLan-win-Setup.exe` (pas pour un lancement via `dotnet run` ou un exécutable copié à la main).
+
 ## Releases automatiques
 
 Chaque push sur `main` déclenche un workflow GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)) qui :
 
-1. compile un exécutable autonome (`SosLan.exe`, self-contained, single-file) ;
-2. publie une [release GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) taguée avec le numéro de version courant (`<Version>` dans le `.csproj`), avec l'exe en pièce jointe.
+1. compile l'application (self-contained, win-x64) ;
+2. la package avec `vpk` en un installeur Velopack (`SosLan-win-Setup.exe`) ;
+3. publie une [release GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) taguée avec le numéro de version courant (`<Version>` dans le `.csproj`), avec l'installeur et les fichiers de mise à jour Velopack en pièces jointes.
 
-Aucune action manuelle n'est nécessaire : la version étant déjà incrémentée à chaque commit, chaque push produit une nouvelle release.
+Aucune action manuelle n'est nécessaire : la version étant déjà incrémentée à chaque commit, chaque push produit une nouvelle release installable et détectable par les postes déjà installés.
