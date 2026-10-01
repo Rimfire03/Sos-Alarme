@@ -1,15 +1,15 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Windows.Forms;
 using SosLan.Models;
 
 namespace SosLan.Services;
 
 public static class SettingsService
 {
-    private static readonly string FolderPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SosLan");
+    private static readonly string FolderPath = PlatformServices.IsMacOS
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Library", "Application Support", "SosLan")
+        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SosLan");
 
     private static readonly string FilePath = Path.Combine(FolderPath, "settings.json");
 

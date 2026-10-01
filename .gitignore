@@ -4,5 +4,6 @@ obj/
 *.user
 .vs/
 publish/
+publish-*/
 *.zip
 Releases/

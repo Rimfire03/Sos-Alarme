@@ -1,11 +1,11 @@
-<Window x:Class="SosLan.Views.SettingsWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SosLan.Views.SettingsWindow"
         Title="Paramètres - SOS-LAN"
         Width="380"
         SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize"
+        CanResize="False"
         ShowInTaskbar="True">
     <StackPanel Margin="16">
         <TextBlock Text="Nom affiché sur le réseau" Margin="0,0,0,4" />
@@ -16,7 +16,7 @@
                  IsReadOnly="True"
                  Focusable="True"
                  Text="Cliquez ici puis appuyez sur une touche"
-                 PreviewKeyDown="OnHotKeyPreviewKeyDown"
+                 KeyDown="OnHotKeyKeyDown"
                  Margin="0,0,0,12" />
 
         <TextBlock Text="Durée de l'appui requise (secondes)" Margin="0,0,0,4" />
@@ -29,7 +29,7 @@
         <TextBox x:Name="MaxAlertDurationBox" Margin="0,0,0,12" />
 
         <CheckBox x:Name="StartWithWindowsCheckBox"
-                  Content="Démarrer automatiquement avec Windows"
+                  Content="Démarrer automatiquement avec le système"
                   Margin="0,0,0,12" />
 
         <TextBlock x:Name="ErrorText"
@@ -37,8 +37,8 @@
                    TextWrapping="Wrap"
                    Margin="0,0,0,12" />
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Annuler" Padding="16,6" Margin="0,0,8,0" Click="OnCancelClick" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Annuler" Padding="16,6" Click="OnCancelClick" />
             <Button Content="Enregistrer" Padding="16,6" Click="OnSaveClick" IsDefault="True" />
         </StackPanel>
 

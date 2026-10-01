@@ -1,13 +1,19 @@
-using System.Windows;
-using System.Windows.Threading;
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Threading;
 using SosLan.Services;
 
 namespace SosLan.Views;
 
 public partial class AlarmWindow : Window
 {
-    private readonly AlarmSoundPlayer _soundPlayer;
+    private readonly IAlarmSoundPlayer _soundPlayer;
     private readonly DispatcherTimer _maxDurationTimer;
+
+    public AlarmWindow() : this("", 60)
+    {
+        // Constructeur sans paramètre requis par le chargeur XAML Avalonia (prévisualiseur).
+    }
 
     public AlarmWindow(string senderName, int maxDurationSeconds)
     {
@@ -15,7 +21,7 @@ public partial class AlarmWindow : Window
         MessageText.Text = $"Alerte en provenance de {senderName}";
         TriggeredAtText.Text = $"Déclenchée le {DateTime.Now:dd/MM/yyyy à HH:mm:ss}";
 
-        _soundPlayer = new AlarmSoundPlayer();
+        _soundPlayer = PlatformServices.CreateAlarmSoundPlayer();
         _soundPlayer.Start();
 
         _maxDurationTimer = new DispatcherTimer
@@ -28,18 +34,17 @@ public partial class AlarmWindow : Window
             _maxDurationTimer.Stop();
         };
         _maxDurationTimer.Start();
+
+        Closed += (_, _) =>
+        {
+            _maxDurationTimer.Stop();
+            _soundPlayer.Stop();
+            _soundPlayer.Dispose();
+        };
     }
 
-    private void OnAcknowledgeClick(object sender, RoutedEventArgs e)
+    private void OnAcknowledgeClick(object? sender, RoutedEventArgs e)
     {
         Close();
-    }
-
-    protected override void OnClosed(EventArgs e)
-    {
-        _maxDurationTimer.Stop();
-        _soundPlayer.Stop();
-        _soundPlayer.Dispose();
-        base.OnClosed(e);
     }
 }

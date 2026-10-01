@@ -1,27 +1,29 @@
-using System.Runtime.InteropServices;
-using System.Windows.Forms;
-using System.Windows.Threading;
+using Avalonia.Threading;
+using SosLan.Models;
 
 namespace SosLan.Services;
 
 /// <summary>
-/// Surveille en permanence l'état d'une touche via l'API Windows (GetAsyncKeyState)
-/// afin de détecter un appui long, quel que soit le programme qui a le focus.
+/// Implémentation commune aux deux plateformes : interroge périodiquement l'état de la
+/// touche cible via un <see cref="IKeyStateProvider"/> spécifique à l'OS, et déclenche
+/// l'évènement une fois la durée de maintien atteinte.
 /// </summary>
-public class HotkeyMonitor : IDisposable
+public class PollingHotkeyMonitor : IHotkeyMonitor
 {
     private const int PollIntervalMs = 50;
 
+    private readonly IKeyStateProvider _keyStateProvider;
     private readonly DispatcherTimer _timer;
-    private Keys _targetKey;
+    private AppKey _targetKey;
     private double _holdSeconds;
     private DateTime? _pressStartedAt;
     private bool _triggered;
 
     public event Action? Triggered;
 
-    public HotkeyMonitor()
+    public PollingHotkeyMonitor(IKeyStateProvider keyStateProvider)
     {
+        _keyStateProvider = keyStateProvider;
         _timer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(PollIntervalMs)
@@ -29,7 +31,7 @@ public class HotkeyMonitor : IDisposable
         _timer.Tick += OnTick;
     }
 
-    public void Start(Keys targetKey, double holdSeconds)
+    public void Start(AppKey targetKey, double holdSeconds)
     {
         UpdateTarget(targetKey, holdSeconds);
         if (!_timer.IsEnabled)
@@ -38,7 +40,7 @@ public class HotkeyMonitor : IDisposable
         }
     }
 
-    public void UpdateTarget(Keys targetKey, double holdSeconds)
+    public void UpdateTarget(AppKey targetKey, double holdSeconds)
     {
         _targetKey = targetKey;
         _holdSeconds = holdSeconds;
@@ -50,7 +52,7 @@ public class HotkeyMonitor : IDisposable
 
     private void OnTick(object? sender, EventArgs e)
     {
-        bool isPressed = (GetAsyncKeyState((int)_targetKey) & 0x8000) != 0;
+        bool isPressed = _keyStateProvider.IsPressed(_targetKey);
 
         if (isPressed)
         {
@@ -74,7 +76,4 @@ public class HotkeyMonitor : IDisposable
         _timer.Stop();
         _timer.Tick -= OnTick;
     }
-
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int vKey);
 }

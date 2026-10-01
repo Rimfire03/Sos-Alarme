@@ -1,60 +1,58 @@
 using System.Reflection;
-using System.Windows;
-using System.Windows.Input;
-using KeyEventArgs = System.Windows.Input.KeyEventArgs;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using SosLan.Models;
 using SosLan.Services;
-using Forms = System.Windows.Forms;
 
 namespace SosLan.Views;
 
 public partial class SettingsWindow : Window
 {
-    private readonly AppSettings _workingCopy;
-    private Forms.Keys _selectedKey;
+    private AppKey _selectedKey;
 
     public AppSettings? Result { get; private set; }
+
+    public SettingsWindow() : this(new AppSettings())
+    {
+        // Constructeur sans paramètre requis par le chargeur XAML Avalonia (prévisualiseur).
+    }
 
     public SettingsWindow(AppSettings currentSettings)
     {
         InitializeComponent();
 
-        _workingCopy = new AppSettings
-        {
-            DisplayName = currentSettings.DisplayName,
-            HotKey = currentSettings.HotKey,
-            HoldDurationSeconds = currentSettings.HoldDurationSeconds,
-            Port = currentSettings.Port,
-            MaxAlertDurationSeconds = currentSettings.MaxAlertDurationSeconds
-        };
-
-        _selectedKey = _workingCopy.HotKey;
-        DisplayNameBox.Text = _workingCopy.DisplayName;
+        _selectedKey = currentSettings.HotKey;
+        DisplayNameBox.Text = currentSettings.DisplayName;
         HotKeyBox.Text = _selectedKey.ToString();
-        DurationBox.Text = _workingCopy.HoldDurationSeconds.ToString();
-        PortBox.Text = _workingCopy.Port.ToString();
-        MaxAlertDurationBox.Text = _workingCopy.MaxAlertDurationSeconds.ToString();
-        StartWithWindowsCheckBox.IsChecked = StartupService.IsEnabled();
+        DurationBox.Text = currentSettings.HoldDurationSeconds.ToString();
+        PortBox.Text = currentSettings.Port.ToString();
+        MaxAlertDurationBox.Text = currentSettings.MaxAlertDurationSeconds.ToString();
+        StartWithWindowsCheckBox.IsChecked = PlatformServices.CreateStartupService().IsEnabled();
 
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = $"SOS-LAN v{version?.Major}.{version?.Minor}.{version?.Build} — © Tomline Prod&Co";
     }
 
-    private void OnHotKeyPreviewKeyDown(object sender, KeyEventArgs e)
+    private void OnHotKeyKeyDown(object? sender, KeyEventArgs e)
     {
         e.Handled = true;
 
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        var vkCode = KeyInterop.VirtualKeyFromKey(key);
-        _selectedKey = (Forms.Keys)vkCode;
+        var mapped = AvaloniaKeyMapping.FromAvaloniaKey(e.Key);
+        if (mapped == null)
+        {
+            return;
+        }
+
+        _selectedKey = mapped.Value;
         HotKeyBox.Text = _selectedKey.ToString();
     }
 
-    private void OnSaveClick(object sender, RoutedEventArgs e)
+    private void OnSaveClick(object? sender, RoutedEventArgs e)
     {
         ErrorText.Text = string.Empty;
 
-        var displayName = DisplayNameBox.Text.Trim();
+        var displayName = DisplayNameBox.Text?.Trim() ?? string.Empty;
         if (string.IsNullOrEmpty(displayName))
         {
             ErrorText.Text = "Le nom affiché ne peut pas être vide.";
@@ -79,7 +77,7 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        StartupService.SetEnabled(StartWithWindowsCheckBox.IsChecked == true);
+        PlatformServices.CreateStartupService().SetEnabled(StartWithWindowsCheckBox.IsChecked == true);
 
         Result = new AppSettings
         {
@@ -90,13 +88,11 @@ public partial class SettingsWindow : Window
             MaxAlertDurationSeconds = maxAlertDuration
         };
 
-        DialogResult = true;
-        Close();
+        Close(true);
     }
 
-    private void OnCancelClick(object sender, RoutedEventArgs e)
+    private void OnCancelClick(object? sender, RoutedEventArgs e)
     {
-        DialogResult = false;
-        Close();
+        Close(false);
     }
 }

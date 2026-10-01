@@ -1,37 +1,13 @@
-using System.IO;
-using System.Media;
-
 namespace SosLan.Services;
 
 /// <summary>
-/// Joue en boucle une tonalité d'alerte générée en mémoire (aucun fichier audio requis).
+/// Génère en mémoire un court motif de deux bips (WAV PCM 16 bits mono), utilisé en
+/// boucle par les lecteurs de son d'alerte de chaque plateforme. Aucun fichier audio
+/// à fournir avec l'application.
 /// </summary>
-public class AlarmSoundPlayer : IDisposable
+public static class AlertToneWavGenerator
 {
-    private readonly SoundPlayer _player;
-    private readonly MemoryStream _stream;
-
-    public AlarmSoundPlayer()
-    {
-        _stream = GenerateAlertToneWav();
-        _player = new SoundPlayer(_stream);
-        _player.Load();
-    }
-
-    public void Start() => _player.PlayLooping();
-
-    public void Stop() => _player.Stop();
-
-    public void Dispose()
-    {
-        _player.Dispose();
-        _stream.Dispose();
-    }
-
-    /// <summary>
-    /// Génère un court motif de deux bips (WAV PCM 16 bits mono) utilisé en boucle.
-    /// </summary>
-    private static MemoryStream GenerateAlertToneWav()
+    public static byte[] Generate()
     {
         const int sampleRate = 44100;
         const double beepDuration = 0.18;
@@ -45,15 +21,14 @@ public class AlarmSoundPlayer : IDisposable
         AppendTone(samples, sampleRate, frequency, beepDuration);
         AppendSilence(samples, sampleRate, pauseDuration);
 
-        var stream = new MemoryStream();
+        using var stream = new MemoryStream();
         WriteWavHeader(stream, sampleRate, samples.Count);
         foreach (var sample in samples)
         {
             stream.Write(BitConverter.GetBytes(sample));
         }
 
-        stream.Position = 0;
-        return stream;
+        return stream.ToArray();
     }
 
     private static void AppendTone(List<short> samples, int sampleRate, double frequency, double durationSeconds)

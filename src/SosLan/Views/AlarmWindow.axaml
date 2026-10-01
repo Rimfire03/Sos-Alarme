@@ -1,13 +1,12 @@
-<Window x:Class="SosLan.Views.AlarmWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SosLan.Views.AlarmWindow"
         Title="Alerte"
         Height="250" Width="420"
         WindowStartupLocation="CenterScreen"
         Topmost="True"
         ShowInTaskbar="True"
-        ResizeMode="NoResize"
-        WindowStyle="ToolWindow"
+        CanResize="False"
         Background="#B00020">
     <Grid Margin="20">
         <Grid.RowDefinitions>

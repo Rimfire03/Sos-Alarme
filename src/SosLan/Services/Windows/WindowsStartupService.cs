@@ -1,25 +1,24 @@
 using System.Diagnostics;
 using Microsoft.Win32;
 
-namespace SosLan.Services;
+namespace SosLan.Services.Windows;
 
 /// <summary>
-/// Active ou désactive le démarrage automatique de l'application avec Windows,
-/// via la clé Run du registre de l'utilisateur courant.
+/// Démarrage automatique via la clé Run du registre de l'utilisateur courant (HKCU).
 /// </summary>
-public static class StartupService
+public class WindowsStartupService : IStartupService
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "SOS-LAN";
 
-    public static bool IsEnabled()
+    public bool IsEnabled()
     {
         using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, false);
         var existing = key?.GetValue(ValueName) as string;
         return existing != null && existing.Trim('"').Equals(GetExecutablePath(), StringComparison.OrdinalIgnoreCase);
     }
 
-    public static void SetEnabled(bool enabled)
+    public void SetEnabled(bool enabled)
     {
         using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, true)
                         ?? Registry.CurrentUser.CreateSubKey(RunKeyPath);

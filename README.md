@@ -1,6 +1,6 @@
 # SOS-LAN
 
-Application Windows (.NET 8 / WPF) qui tourne réduite dans la zone de notification et permet de déclencher une alerte sonore et visuelle sur tous les postes du réseau local qui l'exécutent.
+Application **Windows et macOS** (.NET 8, UI [Avalonia](https://avaloniaui.net/)) qui tourne réduite dans la zone de notification et permet de déclencher une alerte sonore et visuelle sur tous les postes du réseau local qui l'exécutent.
 
 ## Fonctionnement
 
@@ -11,9 +11,24 @@ Application Windows (.NET 8 / WPF) qui tourne réduite dans la zone de notificat
 - Le bouton **Acquitter** de la popup arrête le son et referme la fenêtre.
 - Chaque poste peut définir son propre nom d'affichage, sa touche de déclenchement, la durée d'appui requise et le port réseau via le menu **Paramètres** de l'icône de la zone de notification.
 
+## Compatibilité multiplateforme
+
+Le code métier (réseau, paramètres, mises à jour) est commun aux deux OS ; les parties dépendantes du système sont isolées derrière des interfaces dans `src/SosLan/Services`, avec une implémentation par plateforme (`Services/Windows`, `Services/MacOS`), sélectionnée automatiquement au démarrage (`PlatformServices`) :
+
+| Fonctionnalité | Windows | macOS |
+|---|---|---|
+| Détection de l'appui long | `GetAsyncKeyState` (user32) | `CGEventSourceKeyState` (ApplicationServices) |
+| Démarrage automatique | Clé de registre `HKCU\...\Run` | LaunchAgent (`~/Library/LaunchAgents`) |
+| Signal sonore | `System.Media.SoundPlayer` | boucle sur l'utilitaire système `afplay` |
+| Installeur | `SosLan-win.msi` (Windows Installer) | `.pkg` / `.zip` (Velopack) |
+
+**Important — macOS uniquement** : la détection de l'appui long sur une touche en dehors de l'application nécessite que l'utilisateur accorde la permission **Accessibilité** à SOS-LAN (Réglages Système → Confidentialité et sécurité → Accessibilité). Sans cette autorisation, l'appui long ne sera pas détecté ; macOS ne permet pas d'accorder cette permission silencieusement.
+
+**Non testé en conditions réelles sur macOS** : le build macOS compile et est packagé automatiquement par la CI, mais n'a pas pu être testé sur une machine macOS physique au moment de son développement. Un retour de test est bienvenu.
+
 ## Prérequis
 
-- Windows 10/11
+- Windows 10/11 ou macOS 12+
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) pour compiler
 
 ## Compilation et exécution
@@ -23,24 +38,32 @@ dotnet build
 dotnet run --project src/SosLan/SosLan.csproj
 ```
 
-Pour générer localement l'installeur (nécessite l'outil `vpk`, voir [Installation et mises à jour](#installation-et-mises-à-jour)) :
+Pour générer localement l'installeur Windows (nécessite l'outil `vpk`, voir [Installation et mises à jour](#installation-et-mises-à-jour)) :
 
 ```bash
 dotnet publish src/SosLan/SosLan.csproj -c Release -r win-x64 --self-contained true -p:DebugType=None -o publish
 vpk pack -u SosLan -v <version> -p publish -e SosLan.exe --icon src/SosLan/cloche.ico --packTitle "SOS-LAN" --packAuthors "Tomline Prod and Co" --msi --instLocation Either --instLicense installer/CLUF.md -r win-x64
 ```
 
+Pour générer localement le paquet macOS (à exécuter sur un Mac) :
+
+```bash
+dotnet publish src/SosLan/SosLan.csproj -c Release -r osx-x64 --self-contained true -p:DebugType=None -o publish
+vpk pack -u SosLan -v <version> -p publish -e SosLan --packTitle "SOS-LAN" --packAuthors "Tomline Prod and Co" -r osx-x64 --channel osx-x64
+```
+
 ## Réseau
 
 - Tous les postes doivent être sur le même réseau local (même sous-réseau) et utiliser le même port dans les paramètres.
-- Le pare-feu Windows peut demander une autorisation au premier lancement : autoriser l'accès réseau privé pour que la diffusion et la réception UDP fonctionnent.
+- Le pare-feu (Windows Defender ou le pare-feu applicatif macOS) peut demander une autorisation au premier lancement : autoriser l'accès réseau local pour que la diffusion et la réception UDP fonctionnent.
 
 ## Configuration
 
 Les paramètres sont stockés par utilisateur dans :
 
 ```
-%APPDATA%\SosLan\settings.json
+%APPDATA%\SosLan\settings.json                              (Windows)
+~/Library/Application Support/SosLan/settings.json          (macOS)
 ```
 
 ## Versionnage automatique
@@ -55,6 +78,8 @@ git config core.hooksPath .githooks
 
 ## Installation et mises à jour
 
+### Windows
+
 L'application se distribue sous forme d'un installeur **`SosLan-win.msi`** (Windows Installer, généré par [Velopack](https://velopack.io/)), qui :
 
 - demande à l'utilisateur d'**accepter le CLUF** ([installer/CLUF.md](installer/CLUF.md)) avant de continuer ;
@@ -62,29 +87,33 @@ L'application se distribue sous forme d'un installeur **`SosLan-win.msi`** (Wind
 - crée les raccourcis Bureau et menu Démarrer, et enregistre une entrée standard dans **Programmes et fonctionnalités** (désinstallation via Windows, aucun outil supplémentaire requis) ;
 - lance l'application en fin d'installation.
 
-Après installation :
-
-- le démarrage automatique avec Windows est **activé par défaut** au premier lancement (modifiable ensuite dans les Paramètres) ;
-- au démarrage, l'application vérifie silencieusement s'il existe une nouvelle version publiée sur les [releases GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) ; si oui, une **boîte de dialogue demande confirmation** avant de télécharger et d'installer la mise à jour (puis l'application redémarre automatiquement) ;
-- une vérification manuelle est aussi disponible via le menu **Vérifier les mises à jour** de l'icône de la zone de notification ;
-- la mise à jour automatique ne fonctionne que pour une installation faite via `SosLan-win.msi` (pas pour un lancement via `dotnet run` ou un exécutable copié à la main).
-
-Le CLUF ([installer/CLUF.md](installer/CLUF.md)) précise notamment que le Logiciel est la propriété de **Tomline Prod&Co** et qu'**aucun usage commercial n'est autorisé**.
-
 Pour une installation silencieuse scriptée (déploiement de parc), le dossier peut être imposé via la propriété `VELOPACK_INSTALLDIR` :
 
 ```bash
 msiexec /i SosLan-win.msi /qn VELOPACK_INSTALLDIR="D:\Applications\SosLan"
 ```
 
+### macOS
+
+L'application se distribue sous forme d'un paquet Velopack (`SosLan-osx-x64-Setup.pkg` pour Mac Intel, `SosLan-osx-arm64-Setup.pkg` pour Apple Silicon). Après installation, il faut accorder la permission **Accessibilité** (voir [Compatibilité multiplateforme](#compatibilité-multiplateforme)) pour que la touche d'alerte fonctionne.
+
+### Dans tous les cas
+
+- le démarrage automatique est **activé par défaut** au premier lancement (modifiable ensuite dans les Paramètres) ;
+- au démarrage, l'application vérifie silencieusement s'il existe une nouvelle version publiée sur les [releases GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) ; si oui, une **boîte de dialogue demande confirmation** avant de télécharger et d'installer la mise à jour (puis l'application redémarre automatiquement) ;
+- une vérification manuelle est aussi disponible via le menu **Vérifier les mises à jour** de l'icône de la zone de notification ;
+- la mise à jour automatique ne fonctionne que pour une installation faite via l'installeur officiel (pas pour un lancement via `dotnet run` ou un exécutable copié à la main).
+
+Le CLUF ([installer/CLUF.md](installer/CLUF.md)) précise notamment que le Logiciel est la propriété de **Tomline Prod&Co** et qu'**aucun usage commercial n'est autorisé**.
+
 ## Releases automatiques
 
-Chaque push sur `main` déclenche un workflow GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)) qui :
+Chaque push sur `main` déclenche deux jobs GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)), un par OS (le job macOS attend que le job Windows ait publié la release pour y ajouter ses propres fichiers) :
 
-1. compile l'application (self-contained, win-x64) ;
-2. la package avec `vpk` en installeur Velopack (`SosLan-win.msi`) ;
-3. publie une [release GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) taguée avec le numéro de version courant (`<Version>` dans le `.csproj`), avec l'installeur et les fichiers de mise à jour Velopack en pièces jointes.
+1. compilation de l'application (self-contained, par RID : `win-x64`, `osx-x64`, `osx-arm64`) ;
+2. packaging avec `vpk` en installeurs Velopack propres à chaque OS ;
+3. publication sur une [release GitHub](https://github.com/Rimfire03/Sos-Alarme/releases) taguée avec le numéro de version courant (`<Version>` dans le `.csproj`), avec les installeurs et les fichiers de mise à jour Velopack en pièces jointes.
 
-Aucune action manuelle n'est nécessaire : la version étant déjà incrémentée à chaque commit, chaque push produit une nouvelle release installable et détectable par les postes déjà installés.
+Aucune action manuelle n'est nécessaire : la version étant déjà incrémentée à chaque commit, chaque push produit une nouvelle release installable et détectable par les postes déjà installés, sur les deux OS.
 
 
