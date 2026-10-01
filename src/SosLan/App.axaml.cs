@@ -17,7 +17,6 @@ public partial class App : Application
     private readonly UpdateService _updateService = new();
 
     private AppSettings _settings = new();
-    private Window? _hiddenOwner;
     private TrayIcon? _trayIcon;
     private NativeMenu? _peersMenu;
     private DispatcherTimer? _peersRefreshTimer;
@@ -35,18 +34,6 @@ public partial class App : Application
         {
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             desktop.Exit += (_, _) => Cleanup();
-
-            // Fenêtre invisible nécessaire comme "owner" pour les boîtes de dialogue
-            // modales (Paramètres, messages) ; l'application n'a pas de fenêtre principale.
-            _hiddenOwner = new Window
-            {
-                Width = 1,
-                Height = 1,
-                ShowInTaskbar = false,
-                Opacity = 0,
-                Position = new PixelPoint(-10000, -10000)
-            };
-            _hiddenOwner.Show();
 
             StartApplication();
         }
@@ -127,6 +114,11 @@ public partial class App : Application
             Menu = menu,
             IsVisible = true
         };
+
+        // Une TrayIcon livrée à elle-même n'est jamais prise en compte par le backend
+        // natif : elle doit être enregistrée au niveau de l'Application via la
+        // propriété attachée TrayIcon.Icons pour apparaître réellement à l'écran.
+        TrayIcon.SetIcons(this, new TrayIcons { _trayIcon });
     }
 
     private static WindowIcon? LoadAppIcon()
@@ -172,12 +164,23 @@ public partial class App : Application
         }
     }
 
-    private async Task OpenSettingsAsync()
+    private Task OpenSettingsAsync()
     {
+        var tcs = new TaskCompletionSource();
         var window = new SettingsWindow(_settings);
-        var saved = await window.ShowDialog<bool>(_hiddenOwner!);
+        window.Closed += (_, _) =>
+        {
+            OnSettingsClosed(window);
+            tcs.TrySetResult();
+        };
+        window.Show();
+        window.Activate();
+        return tcs.Task;
+    }
 
-        if (saved && window.Result != null)
+    private void OnSettingsClosed(SettingsWindow window)
+    {
+        if (window.Result != null)
         {
             _settings = window.Result;
             SettingsService.Save(_settings);
@@ -215,7 +218,7 @@ public partial class App : Application
             case UpdateService.CheckOutcome.NotInstalled:
                 if (!silent)
                 {
-                    await MessageWindow.ShowInfo(_hiddenOwner!, "Mise à jour",
+                    await MessageWindow.ShowInfo("Mise à jour",
                         "Mise à jour indisponible : l'application ne semble pas provenir d'une installation officielle.");
                 }
                 break;
@@ -223,14 +226,12 @@ public partial class App : Application
             case UpdateService.CheckOutcome.UpToDate:
                 if (!silent)
                 {
-                    await MessageWindow.ShowInfo(_hiddenOwner!, "Mise à jour", "Vous possédez déjà la dernière version de SOS-LAN.");
+                    await MessageWindow.ShowInfo("Mise à jour", "Vous possédez déjà la dernière version de SOS-LAN.");
                 }
                 break;
 
             case UpdateService.CheckOutcome.UpdateAvailable:
-                var confirmed = await MessageWindow.ShowConfirm(
-                    _hiddenOwner!,
-                    "Mise à jour disponible",
+                var confirmed = await MessageWindow.ShowConfirm("Mise à jour disponible",
                     $"Une nouvelle version de SOS-LAN est disponible (v{version}).\n\nInstaller la mise à jour maintenant ? L'application redémarrera automatiquement.");
 
                 if (confirmed)
@@ -238,7 +239,7 @@ public partial class App : Application
                     var applied = await _updateService.DownloadAndApplyAsync();
                     if (!applied)
                     {
-                        await MessageWindow.ShowInfo(_hiddenOwner!, "Mise à jour", "Échec de l'installation de la mise à jour.");
+                        await MessageWindow.ShowInfo("Mise à jour", "Échec de l'installation de la mise à jour.");
                     }
                 }
                 break;
@@ -246,7 +247,7 @@ public partial class App : Application
             case UpdateService.CheckOutcome.Failed:
                 if (!silent)
                 {
-                    await MessageWindow.ShowInfo(_hiddenOwner!, "Mise à jour",
+                    await MessageWindow.ShowInfo("Mise à jour",
                         "Échec de la vérification des mises à jour. Vérifiez votre connexion réseau et réessayez.");
                 }
                 break;
