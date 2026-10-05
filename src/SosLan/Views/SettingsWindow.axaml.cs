@@ -10,6 +10,7 @@ namespace SosLan.Views;
 public partial class SettingsWindow : Window
 {
     private AppKey _selectedKey;
+    private bool _capturingKey;
 
     public AppSettings? Result { get; private set; }
 
@@ -22,9 +23,11 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
 
+        AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+
         _selectedKey = currentSettings.HotKey;
         DisplayNameBox.Text = currentSettings.DisplayName;
-        HotKeyBox.Text = _selectedKey.ToString();
+        HotKeyText.Text = _selectedKey.ToString();
         DurationBox.Text = currentSettings.HoldDurationSeconds.ToString();
         PortBox.Text = currentSettings.Port.ToString();
         MaxAlertDurationBox.Text = currentSettings.MaxAlertDurationSeconds.ToString();
@@ -34,18 +37,49 @@ public partial class SettingsWindow : Window
         VersionText.Text = $"SOS-LAN v{version?.Major}.{version?.Minor}.{version?.Build} — © Tomline Prod&Co";
     }
 
-    private void OnHotKeyKeyDown(object? sender, KeyEventArgs e)
+    private void OnChangeKeyClick(object? sender, RoutedEventArgs e)
     {
+        if (_capturingKey)
+        {
+            StopCapture();
+            return;
+        }
+
+        _capturingKey = true;
+        ErrorText.Text = string.Empty;
+        HotKeyText.Text = "Appuyez sur la touche souhaitée...";
+        ChangeKeyButton.Content = "Annuler";
+    }
+
+    // Écouté en phase "tunnel" au niveau de la fenêtre : pendant la capture, toutes les
+    // touches (Tab, Espace, Entrée...) sont interceptées avant que l'interface ne les
+    // traite (changement de focus, clic sur un bouton, validation du formulaire).
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!_capturingKey)
+        {
+            return;
+        }
+
         e.Handled = true;
 
         var mapped = AvaloniaKeyMapping.FromAvaloniaKey(e.Key);
         if (mapped == null)
         {
+            ErrorText.Text = "Cette touche n'est pas prise en charge (lettres, chiffres, F1-F12, flèches, Espace, Tab, Échap, etc.). Essayez-en une autre ou cliquez sur Annuler.";
             return;
         }
 
         _selectedKey = mapped.Value;
-        HotKeyBox.Text = _selectedKey.ToString();
+        StopCapture();
+    }
+
+    private void StopCapture()
+    {
+        _capturingKey = false;
+        HotKeyText.Text = _selectedKey.ToString();
+        ChangeKeyButton.Content = "Modifier";
+        ErrorText.Text = string.Empty;
     }
 
     private void OnSaveClick(object? sender, RoutedEventArgs e)

@@ -10,6 +10,7 @@ Application **Windows et macOS** (.NET 8, UI [Avalonia](https://avaloniaui.net/)
 - Chaque poste qui reçoit l'alerte affiche une popup rouge "Alerte en provenance de `<nom du poste>`" accompagnée d'un signal sonore en boucle.
 - Le bouton **Acquitter** de la popup arrête le son et referme la fenêtre.
 - Chaque poste peut définir son propre nom d'affichage, sa touche de déclenchement, la durée d'appui requise et le port réseau via le menu **Paramètres** de l'icône de la zone de notification.
+- Pour changer la touche de déclenchement : **Paramètres → Modifier** (à côté de la touche), puis appuyer directement sur la touche souhaitée ; **Annuler** quitte le mode capture sans rien changer.
 
 ## Compatibilité multiplateforme
 

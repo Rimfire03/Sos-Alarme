@@ -12,12 +12,17 @@
         <TextBox x:Name="DisplayNameBox" Margin="0,0,0,12" />
 
         <TextBlock Text="Touche déclenchant l'alerte" Margin="0,0,0,4" />
-        <TextBox x:Name="HotKeyBox"
-                 IsReadOnly="True"
-                 Focusable="True"
-                 Text="Cliquez ici puis appuyez sur une touche"
-                 KeyDown="OnHotKeyKeyDown"
-                 Margin="0,0,0,12" />
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+            <Border BorderBrush="Gray" BorderThickness="1" CornerRadius="3" Padding="8,6">
+                <TextBlock x:Name="HotKeyText" VerticalAlignment="Center" />
+            </Border>
+            <Button x:Name="ChangeKeyButton"
+                    Grid.Column="1"
+                    Content="Modifier"
+                    Padding="14,6"
+                    Margin="8,0,0,0"
+                    Click="OnChangeKeyClick" />
+        </Grid>
 
         <TextBlock Text="Durée de l'appui requise (secondes)" Margin="0,0,0,4" />
         <TextBox x:Name="DurationBox" Margin="0,0,0,12" />
