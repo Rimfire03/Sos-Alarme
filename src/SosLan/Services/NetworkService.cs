@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -13,6 +14,7 @@ namespace SosLan.Services;
 public class AlarmMessage
 {
     public string Type { get; set; } = "announce";
+    public string MessageId { get; set; } = string.Empty;
     public string InstanceId { get; set; } = string.Empty;
     public string SenderName { get; set; } = string.Empty;
 }
@@ -25,10 +27,13 @@ public class NetworkService : IDisposable
 {
     private static readonly TimeSpan AnnounceInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PeerTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan SeenMessageTtl = TimeSpan.FromMinutes(2);
 
     private readonly Guid _instanceId;
     private readonly object _peersLock = new();
     private readonly Dictionary<string, (string Name, DateTime LastSeen)> _peers = new();
+    private readonly object _seenLock = new();
+    private readonly Dictionary<string, DateTime> _seenMessageIds = new();
 
     private UdpClient? _listener;
     private CancellationTokenSource? _cts;
@@ -117,7 +122,7 @@ public class NetworkService : IDisposable
                     _peers[message.InstanceId] = (message.SenderName, DateTime.UtcNow);
                 }
 
-                if (message.Type == "alarm")
+                if (message.Type == "alarm" && !IsDuplicateMessage(message.MessageId))
                 {
                     AlarmReceived?.Invoke(message.SenderName);
                 }
@@ -156,6 +161,7 @@ public class NetworkService : IDisposable
         var message = new AlarmMessage
         {
             Type = type,
+            MessageId = Guid.NewGuid().ToString("N"),
             InstanceId = _instanceId.ToString(),
             SenderName = senderName
         };
@@ -163,9 +169,96 @@ public class NetworkService : IDisposable
         var json = JsonSerializer.Serialize(message);
         var bytes = Encoding.UTF8.GetBytes(json);
 
-        using var sender = new UdpClient();
-        sender.EnableBroadcast = true;
-        sender.Send(bytes, bytes.Length, new IPEndPoint(IPAddress.Broadcast, _port));
+        // Le broadcast limité 255.255.255.255 ne sort que par UNE interface (celle de plus
+        // basse métrique), ce qui rend invisibles les postes joignables via une autre
+        // interface (réseau de VM VMware/Hyper-V, VPN, second adaptateur...). On émet donc
+        // sur chaque interface active, vers l'adresse de broadcast de son sous-réseau, avec
+        // un socket lié à l'IP de l'interface pour forcer la sortie par celle-ci.
+        foreach (var (localAddress, broadcastAddress) in GetBroadcastTargets())
+        {
+            try
+            {
+                using var sender = new UdpClient(new IPEndPoint(localAddress, 0));
+                sender.EnableBroadcast = true;
+                sender.Send(bytes, bytes.Length, new IPEndPoint(broadcastAddress, _port));
+            }
+            catch
+            {
+                // Interface qui refuse l'envoi (en cours de déconnexion...) : on passe à la suivante.
+            }
+        }
+    }
+
+    private static List<(IPAddress Local, IPAddress Broadcast)> GetBroadcastTargets()
+    {
+        var targets = new List<(IPAddress, IPAddress)>();
+
+        try
+        {
+            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.OperationalStatus != OperationalStatus.Up ||
+                    nic.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
+                {
+                    continue;
+                }
+
+                foreach (var unicast in nic.GetIPProperties().UnicastAddresses)
+                {
+                    if (unicast.Address.AddressFamily != AddressFamily.InterNetwork || unicast.PrefixLength is <= 0 or >= 32)
+                    {
+                        continue;
+                    }
+
+                    var ip = unicast.Address.GetAddressBytes();
+                    var hostMask = ~(uint.MaxValue << (32 - unicast.PrefixLength));
+                    var ipValue = (uint)(ip[0] << 24 | ip[1] << 16 | ip[2] << 8 | ip[3]);
+                    var broadcastValue = ipValue | hostMask;
+                    var broadcast = new IPAddress(new[]
+                    {
+                        (byte)(broadcastValue >> 24), (byte)(broadcastValue >> 16),
+                        (byte)(broadcastValue >> 8), (byte)broadcastValue
+                    });
+
+                    targets.Add((unicast.Address, broadcast));
+                }
+            }
+        }
+        catch
+        {
+            // Énumération des interfaces impossible : repli sur le broadcast limité ci-dessous.
+        }
+
+        if (targets.Count == 0)
+        {
+            targets.Add((IPAddress.Any, IPAddress.Broadcast));
+        }
+
+        return targets;
+    }
+
+    /// <summary>
+    /// Un même message émis sur plusieurs interfaces peut nous parvenir plusieurs fois
+    /// (postes multi-interfaces) : on ne déclenche l'alerte qu'une fois par MessageId.
+    /// </summary>
+    private bool IsDuplicateMessage(string messageId)
+    {
+        if (string.IsNullOrEmpty(messageId))
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+
+        lock (_seenLock)
+        {
+            foreach (var expired in _seenMessageIds.Where(kv => now - kv.Value > SeenMessageTtl).Select(kv => kv.Key).ToList())
+            {
+                _seenMessageIds.Remove(expired);
+            }
+
+            return !_seenMessageIds.TryAdd(messageId, now);
+        }
     }
 
     public void Dispose() => Stop();

@@ -55,6 +55,8 @@ vpk pack -u SosLan -v <version> -p publish -e SosLan --packTitle "SOS-LAN" --pac
 ## Réseau
 
 - Tous les postes doivent être sur le même réseau local (même sous-réseau) et utiliser le même port dans les paramètres.
+- Les annonces de présence et les alertes sont émises par broadcast UDP sur **chaque interface réseau active** (adresse de broadcast de chaque sous-réseau), et non sur la seule interface par défaut : un poste ayant plusieurs adaptateurs (VPN, réseaux VMware/Hyper-V...) joint donc les postes de tous ses réseaux. Une alerte reçue plusieurs fois (poste multi-interfaces) n'est affichée qu'une fois.
+- Machine virtuelle (VMware, VirtualBox, Parallels...) : en mode **réseau « Bridged/Pont »** la VM est un poste à part entière du LAN. En mode **NAT**, elle n'est dans le même réseau que l'hôte (et lui seul) que via le réseau virtuel de l'hyperviseur ; le broadcast ne traverse pas le NAT vers le LAN physique.
 - Le pare-feu (Windows Defender ou le pare-feu applicatif macOS) peut demander une autorisation au premier lancement : autoriser l'accès réseau local pour que la diffusion et la réception UDP fonctionnent.
 
 ## Configuration
