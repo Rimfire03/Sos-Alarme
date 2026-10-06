@@ -71,25 +71,34 @@ function New-RandomPassword([int]$length = 32) {
     -join ($bytes | ForEach-Object { $chars[$_ % $chars.Length] })
 }
 
-# "gh secret set" lit le secret sur l'entrée standard. On écrit les OCTETS bruts (UTF-8 sans BOM,
-# sans retour à la ligne final) : passer par le StreamWriter de Process ajoute un BOM selon
-# l'encodage de la console, ce qui corrompait le secret.
+# "gh secret set" lit le secret sur l'entrée standard. Le StreamWriter de Process écrit d'office le
+# préambule (BOM) de Console.InputEncoding en tête du flux, ce qui corrompait le secret (base64
+# invalide). On impose donc temporairement un encodage UTF-8 SANS préambule et on écrit les octets
+# bruts, sans retour à la ligne final.
 function Set-GitHubSecret([string]$name, [string]$value) {
-    $psi = New-Object Diagnostics.ProcessStartInfo
-    $psi.FileName = "gh"
-    $psi.Arguments = "secret set $name --repo $Repo"
-    $psi.RedirectStandardInput = $true
-    $psi.RedirectStandardError = $true
-    $psi.RedirectStandardOutput = $true
-    $psi.UseShellExecute = $false
-    $process = [Diagnostics.Process]::Start($psi)
-    $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes($value)
-    $process.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
-    $process.StandardInput.BaseStream.Flush()
-    $process.StandardInput.Close()
-    $process.WaitForExit()
-    if ($process.ExitCode -ne 0) {
-        throw "Échec de l'enregistrement du secret $name : $($process.StandardError.ReadToEnd())"
+    $utf8NoBom = New-Object Text.UTF8Encoding($false)
+    $previousEncoding = [Console]::InputEncoding
+    [Console]::InputEncoding = $utf8NoBom
+    try {
+        $psi = New-Object Diagnostics.ProcessStartInfo
+        $psi.FileName = "gh"
+        $psi.Arguments = "secret set $name --repo $Repo"
+        $psi.RedirectStandardInput = $true
+        $psi.RedirectStandardError = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.UseShellExecute = $false
+        $process = [Diagnostics.Process]::Start($psi)
+        $bytes = $utf8NoBom.GetBytes($value)
+        $process.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
+        $process.StandardInput.BaseStream.Flush()
+        $process.StandardInput.Close()
+        $process.WaitForExit()
+        if ($process.ExitCode -ne 0) {
+            throw "Échec de l'enregistrement du secret $name : $($process.StandardError.ReadToEnd())"
+        }
+    }
+    finally {
+        [Console]::InputEncoding = $previousEncoding
     }
 }
 
