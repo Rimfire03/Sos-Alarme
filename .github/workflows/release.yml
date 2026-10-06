@@ -102,7 +102,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload v${{ steps.version.outputs.version }} installer/SosLan-codesign.cer --clobber
+          gh release upload v${{ steps.version.outputs.version }} installer/TomLine-signature.cer --clobber
 
   release-macos:
     needs: release-windows
@@ -166,7 +166,7 @@ jobs:
 
           # Un certificat auto-signé n'est utilisable par codesign que s'il est approuvé pour la
           # signature de code ; le runner étant éphémère, on l'approuve au niveau système.
-          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain installer/SosLan-codesign.cer
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain installer/TomLine-signature.cer
 
           security find-identity -p codesigning "$KEYCHAIN"
           echo "enabled=true" >> "$GITHUB_OUTPUT"
@@ -177,7 +177,7 @@ jobs:
         run: |
           $signArgs = @()
           if ("${{ steps.signing.outputs.enabled }}" -eq "true") {
-            $signArgs = @("--signAppIdentity", "Tomline Prod and Co", "--keychain", "${{ steps.signing.outputs.keychain }}", "--signEntitlements", "installer/entitlements.plist")
+            $signArgs = @("--signAppIdentity", "TomLine prod&co", "--keychain", "${{ steps.signing.outputs.keychain }}", "--signEntitlements", "installer/entitlements.plist")
           }
 
           dotnet publish src/SosLan/SosLan.csproj -c Release -r osx-x64 --self-contained true -p:DebugType=None -o publish-x64
@@ -192,7 +192,7 @@ jobs:
         run: |
           $signArgs = @()
           if ("${{ steps.signing.outputs.enabled }}" -eq "true") {
-            $signArgs = @("--signAppIdentity", "Tomline Prod and Co", "--keychain", "${{ steps.signing.outputs.keychain }}", "--signEntitlements", "installer/entitlements.plist")
+            $signArgs = @("--signAppIdentity", "TomLine prod&co", "--keychain", "${{ steps.signing.outputs.keychain }}", "--signEntitlements", "installer/entitlements.plist")
           }
 
           dotnet publish src/SosLan/SosLan.csproj -c Release -r osx-arm64 --self-contained true -p:DebugType=None -o publish-arm64
@@ -234,5 +234,5 @@ jobs:
         if: always() && steps.signing.outputs.enabled == 'true'
         shell: bash
         run: |
-          sudo security remove-trusted-cert -d installer/SosLan-codesign.cer || true
+          sudo security remove-trusted-cert -d installer/TomLine-signature.cer || true
           security delete-keychain "${{ steps.signing.outputs.keychain }}" || true

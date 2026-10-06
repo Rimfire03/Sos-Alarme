@@ -1,35 +1,68 @@
 ﻿<#
-    Automatise la mise en place de la signature de code AUTO-SIGNÉE de SOS-LAN
-    (un seul certificat, utilisé par la CI pour Windows ET macOS).
+    Met en place la signature de code des releases de SOS-LAN (Windows ET macOS) : enregistre le
+    certificat de signature comme secrets du dépôt GitHub utilisés par la CI
+    (SIGNING_CERT_PFX_BASE64 / SIGNING_CERT_PASSWORD) et copie le certificat PUBLIC dans
+    installer/TomLine-signature.cer.
 
-    Ce script :
-      1. génère un certificat de signature de code auto-signé (RSA 3072, SHA-256) ;
-      2. l'exporte en .pfx protégé par un mot de passe aléatoire, jamais affiché ;
-      3. enregistre le .pfx (base64) et le mot de passe comme secrets GitHub du dépôt
-         (SIGNING_CERT_PFX_BASE64 / SIGNING_CERT_PASSWORD) via la CLI "gh" ;
-      4. écrit le certificat PUBLIC dans installer/SosLan-codesign.cer (à committer, utile
-         pour que les postes fassent confiance aux versions signées) ;
-      5. garde une sauvegarde locale dans %USERPROFILE%\SosLan-signing-backup (le mot de
-         passe y est chiffré DPAPI : lisible uniquement par ce compte Windows).
+    Deux modes :
+
+    1) Certificat existant de l'éditeur (recommandé : un seul certificat pour tous les projets,
+       les postes ne l'approuvent qu'une fois) :
+
+         .\scripts\Initialize-CodeSigning.ps1 -ImportFrom Rimfire03/TomLine-signing-keys `
+             -PasswordFile "$env:USERPROFILE\.tomline-signing\TomLine-signature.pfx.password.txt"
+
+       Le .pfx et le .cer sont téléchargés depuis ce dépôt privé (via "gh"), l'ouverture du .pfx
+       est vérifiée et son empreinte comparée à celle du .cer. Sans -PasswordFile, le mot de
+       passe est saisi masqué. Il n'est jamais affiché ni écrit sur disque.
+
+    2) Nouveau certificat auto-signé (aucun -ImportFrom) : génère un certificat avec un mot de
+       passe aléatoire et garde une sauvegarde locale hors dépôt dans
+       %USERPROFILE%\SosLan-signing-backup (mot de passe chiffré DPAPI).
 
     Prérequis : "gh auth login" déjà fait, avec le droit d'écrire les secrets du dépôt.
-
-    ATTENTION : relancer ce script crée un NOUVEAU certificat (nouvelle empreinte). Les postes
-    ayant approuvé l'ancien devront approuver le nouveau, et sous macOS la permission
-    Accessibilité sera redemandée une fois. À ne faire qu'en cas de renouvellement/compromission.
 #>
 param(
     [string]$Repo = "Rimfire03/Sos-Alarme",
-    [string]$Subject = "CN=Tomline Prod and Co, O=Tomline Prod and Co",
-    [int]$ValidityYears = 10
+    [string]$ImportFrom,
+    [string]$PfxName = "TomLine-signature.pfx",
+    [string]$CerName = "TomLine-signature.cer",
+    [string]$PasswordFile,
+    [string]$Subject = "CN=TomLine prod&co, O=TomLine prod&co",
+    [int]$ValidityYears = 5
 )
 
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (& git rev-parse --show-toplevel).Trim()
-$cerPath = Join-Path $repoRoot "installer\SosLan-codesign.cer"
-$backupDir = Join-Path $env:USERPROFILE "SosLan-signing-backup"
-$tempPfx = Join-Path ([IO.Path]::GetTempPath()) ("soslan-" + [Guid]::NewGuid().ToString("N") + ".pfx")
+$cerOutPath = Join-Path $repoRoot "installer\TomLine-signature.cer"
+$workDir = Join-Path ([IO.Path]::GetTempPath()) ("soslan-sign-" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+
+function Get-RepoFile([string]$repo, [string]$name, [string]$destination) {
+    $json = & gh api "repos/$repo/contents/$name" | ConvertFrom-Json
+    [IO.File]::WriteAllBytes($destination, [Convert]::FromBase64String(($json.content -replace "\s", "")))
+}
+
+# Lit un fichier texte contenant un mot de passe, quel que soit son encodage (UTF-16 avec BOM,
+# UTF-8 avec ou sans BOM, ANSI), sans jamais l'afficher.
+function Read-PasswordFile([string]$path) {
+    $bytes = [IO.File]::ReadAllBytes($path)
+    if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+        $text = [Text.Encoding]::Unicode.GetString($bytes, 2, $bytes.Length - 2)
+    } elseif ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $text = [Text.Encoding]::UTF8.GetString($bytes, 3, $bytes.Length - 3)
+    } else {
+        $text = [Text.Encoding]::UTF8.GetString($bytes)
+    }
+    $text.Trim()
+}
+
+function ConvertTo-PlainText([Security.SecureString]$secure) {
+    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try { [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) }
+    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
+}
 
 function New-RandomPassword([int]$length = 32) {
     $chars = [char[]]"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
@@ -38,8 +71,9 @@ function New-RandomPassword([int]$length = 32) {
     -join ($bytes | ForEach-Object { $chars[$_ % $chars.Length] })
 }
 
-# "gh secret set" lit le secret sur l'entrée standard ; on l'écrit sans retour à la ligne final
-# (qui ferait partie du secret) et sans jamais le passer en argument de commande.
+# "gh secret set" lit le secret sur l'entrée standard. On écrit les OCTETS bruts (UTF-8 sans BOM,
+# sans retour à la ligne final) : passer par le StreamWriter de Process ajoute un BOM selon
+# l'encodage de la console, ce qui corrompait le secret.
 function Set-GitHubSecret([string]$name, [string]$value) {
     $psi = New-Object Diagnostics.ProcessStartInfo
     $psi.FileName = "gh"
@@ -49,7 +83,9 @@ function Set-GitHubSecret([string]$name, [string]$value) {
     $psi.RedirectStandardOutput = $true
     $psi.UseShellExecute = $false
     $process = [Diagnostics.Process]::Start($psi)
-    $process.StandardInput.Write($value)
+    $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes($value)
+    $process.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
+    $process.StandardInput.BaseStream.Flush()
     $process.StandardInput.Close()
     $process.WaitForExit()
     if ($process.ExitCode -ne 0) {
@@ -57,38 +93,72 @@ function Set-GitHubSecret([string]$name, [string]$value) {
     }
 }
 
-$passwordPlain = New-RandomPassword
-$passwordSecure = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
-
-$cert = New-SelfSignedCertificate `
-    -Type CodeSigningCert `
-    -Subject $Subject `
-    -KeyAlgorithm RSA -KeyLength 3072 `
-    -HashAlgorithm SHA256 `
-    -KeyExportPolicy Exportable `
-    -CertStoreLocation "Cert:\CurrentUser\My" `
-    -NotAfter (Get-Date).AddYears($ValidityYears)
-
 try {
-    Export-PfxCertificate -Cert $cert -FilePath $tempPfx -Password $passwordSecure | Out-Null
-    Export-Certificate -Cert $cert -FilePath $cerPath | Out-Null
+    if ($ImportFrom) {
+        $pfxPath = Join-Path $workDir $PfxName
+        $cerSource = Join-Path $workDir $CerName
+        Get-RepoFile $ImportFrom $PfxName $pfxPath
+        Get-RepoFile $ImportFrom $CerName $cerSource
 
-    Set-GitHubSecret "SIGNING_CERT_PFX_BASE64" ([Convert]::ToBase64String([IO.File]::ReadAllBytes($tempPfx)))
+        if ($PasswordFile) {
+            if (-not (Test-Path $PasswordFile)) { throw "Fichier de mot de passe introuvable : $PasswordFile" }
+            $passwordPlain = Read-PasswordFile $PasswordFile
+        } else {
+            $passwordPlain = ConvertTo-PlainText (Read-Host "Mot de passe du fichier .pfx" -AsSecureString)
+        }
+
+        # Vérifie que le mot de passe ouvre bien le .pfx et que c'est le certificat annoncé.
+        try {
+            $cert = New-Object Security.Cryptography.X509Certificates.X509Certificate2($pfxPath, $passwordPlain)
+        } catch {
+            throw "Impossible d'ouvrir le .pfx avec ce mot de passe."
+        }
+        if (-not $cert.HasPrivateKey) { throw "Le .pfx ne contient pas de clé privée." }
+        $publicCert = New-Object Security.Cryptography.X509Certificates.X509Certificate2($cerSource)
+        if ($publicCert.Thumbprint -ne $cert.Thumbprint) {
+            throw "L'empreinte du .pfx ($($cert.Thumbprint)) ne correspond pas à celle du .cer ($($publicCert.Thumbprint))."
+        }
+        if ($cert.NotAfter -lt (Get-Date)) { throw "Le certificat a expiré le $($cert.NotAfter.ToString('dd/MM/yyyy'))." }
+
+        Copy-Item $cerSource $cerOutPath -Force
+    }
+    else {
+        $passwordPlain = New-RandomPassword
+        $passwordSecure = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
+        $pfxPath = Join-Path $workDir "SosLan-codesign.pfx"
+
+        $cert = New-SelfSignedCertificate `
+            -Type CodeSigningCert `
+            -Subject $Subject `
+            -KeyAlgorithm RSA -KeyLength 3072 `
+            -HashAlgorithm SHA256 `
+            -KeyExportPolicy Exportable `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -NotAfter (Get-Date).AddYears($ValidityYears)
+
+        try {
+            Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $passwordSecure | Out-Null
+            Export-Certificate -Cert $cert -FilePath $cerOutPath | Out-Null
+        } finally {
+            Remove-Item -Path "Cert:\CurrentUser\My\$($cert.Thumbprint)" -DeleteKey -ErrorAction SilentlyContinue
+        }
+
+        $backupDir = Join-Path $env:USERPROFILE "SosLan-signing-backup"
+        New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+        Copy-Item $pfxPath (Join-Path $backupDir "SosLan-codesign.pfx") -Force
+        $passwordSecure | ConvertFrom-SecureString | Set-Content (Join-Path $backupDir "SosLan-codesign.password.dpapi") -Encoding ascii
+    }
+
+    Set-GitHubSecret "SIGNING_CERT_PFX_BASE64" ([Convert]::ToBase64String([IO.File]::ReadAllBytes($pfxPath)))
     Set-GitHubSecret "SIGNING_CERT_PASSWORD" $passwordPlain
 
-    New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
-    Copy-Item $tempPfx (Join-Path $backupDir "SosLan-codesign.pfx") -Force
-    $passwordSecure | ConvertFrom-SecureString | Set-Content (Join-Path $backupDir "SosLan-codesign.password.dpapi") -Encoding ascii
+    Write-Host ""
+    Write-Host "Certificat : $($cert.Subject)"
+    Write-Host "  Empreinte SHA-1  : $($cert.Thumbprint)"
+    Write-Host "  Valable jusqu'au : $($cert.NotAfter.ToString('dd/MM/yyyy'))"
+    Write-Host "  Secrets GitHub   : SIGNING_CERT_PFX_BASE64, SIGNING_CERT_PASSWORD (dépôt $Repo)"
+    Write-Host "  Certificat public : $cerOutPath  (à committer)"
 }
 finally {
-    if (Test-Path $tempPfx) { Remove-Item $tempPfx -Force }
-    Remove-Item -Path "Cert:\CurrentUser\My\$($cert.Thumbprint)" -DeleteKey -ErrorAction SilentlyContinue
+    if (Test-Path $workDir) { Remove-Item $workDir -Recurse -Force }
 }
-
-Write-Host ""
-Write-Host "Certificat créé : $Subject"
-Write-Host "  Empreinte SHA-1 : $($cert.Thumbprint)"
-Write-Host "  Valable jusqu'au : $($cert.NotAfter.ToString('dd/MM/yyyy'))"
-Write-Host "  Secrets GitHub  : SIGNING_CERT_PFX_BASE64, SIGNING_CERT_PASSWORD (dépôt $Repo)"
-Write-Host "  Certificat public : $cerPath  (à committer)"
-Write-Host "  Sauvegarde locale : $backupDir  (hors dépôt, ne jamais committer)"

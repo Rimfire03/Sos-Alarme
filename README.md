@@ -111,25 +111,31 @@ Le CLUF ([installer/CLUF.md](installer/CLUF.md)) précise notamment que le Logic
 
 ## Signature du code
 
-Les releases sont signées par la CI avec un **certificat auto-signé** « Tomline Prod and Co » (empreinte SHA-1 `1C5219B67511CE1DBFF8069724CB5E53B872349A`), le même pour les deux OS :
+Les releases sont signées par la CI avec le **certificat auto-signé de l'éditeur** « TomLine prod&co » (empreinte SHA-1 `168FFE4B6B2D5E042808B001B5146C6D137F532C`, valable jusqu'au 06/10/2031), le même pour les deux OS **et pour tous les projets de l'éditeur** : les postes ne l'approuvent qu'une fois. La clé privée est archivée dans le dépôt privé `Rimfire03/TomLine-signing-keys` (mot de passe hors dépôt).
 
 - **Windows** : MSI, exécutables et DLL signés (SHA-256, horodatage DigiCert) ;
 - **macOS** : application signée avec ce certificat et les droits de [installer/entitlements.plist](installer/entitlements.plist) (nécessaires au runtime .NET). L'identité de l'app étant identique d'une version à l'autre, macOS **conserve la permission Accessibilité** lors des mises à jour (avec une signature ad hoc, elle serait redemandée à chaque version).
 
 **Limites** : un certificat auto-signé n'est reconnu par aucune autorité. Tant qu'il n'est pas approuvé sur un poste, SmartScreen (Windows) et Gatekeeper (macOS) affichent encore leur avertissement, et l'app n'est pas notarisée par Apple. La signature garantit en revanche l'intégrité et l'origine des fichiers.
 
-**Faire approuver le certificat sur un poste** (le fichier `SosLan-codesign.cer` est joint à chaque release et présent dans [installer/](installer/SosLan-codesign.cer)). Vérifier d'abord l'empreinte ci-dessus, puis :
+**Faire approuver le certificat sur un poste** (le fichier `TomLine-signature.cer` est joint à chaque release et présent dans [installer/](installer/TomLine-signature.cer)). Vérifier d'abord l'empreinte ci-dessus, puis :
 
 ```bash
 # Windows (PowerShell administrateur) ; en parc, déployer par GPO
-certutil -addstore -f Root SosLan-codesign.cer
-certutil -addstore -f TrustedPublisher SosLan-codesign.cer
+certutil -addstore -f Root TomLine-signature.cer
+certutil -addstore -f TrustedPublisher TomLine-signature.cer
 
 # macOS
-sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain SosLan-codesign.cer
+sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain TomLine-signature.cer
 ```
 
-**Mise en place / renouvellement** : `scripts/Initialize-CodeSigning.ps1` automatise tout (génère le certificat, enregistre les secrets GitHub `SIGNING_CERT_PFX_BASE64` et `SIGNING_CERT_PASSWORD`, écrit le `.cer` public, sauvegarde la clé hors dépôt dans `%USERPROFILE%\SosLan-signing-backup`). Le relancer crée un nouveau certificat (nouvelle empreinte à faire approuver). Sans ces secrets, la CI continue de produire des releases **non signées**.
+**Mise en place / renouvellement** : `scripts/Initialize-CodeSigning.ps1` enregistre les secrets GitHub `SIGNING_CERT_PFX_BASE64` et `SIGNING_CERT_PASSWORD` et copie le `.cer` public dans `installer/`. Avec le certificat existant de l'éditeur (le mot de passe n'est jamais affiché) :
+
+```powershell
+.\scripts\Initialize-CodeSigning.ps1 -ImportFrom Rimfire03/TomLine-signing-keys -PasswordFile "$env:USERPROFILE\.tomline-signing\TomLine-signature.pfx.password.txt"
+```
+
+Sans `-ImportFrom`, le script génère un nouveau certificat (nouvelle empreinte à faire approuver). Sans les secrets, la CI continue de produire des releases **non signées**. Avant l'expiration (2031), renouveler le certificat dans `TomLine-signing-keys`, relancer ce script et republier.
 
 ## Releases automatiques
 
