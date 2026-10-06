@@ -7,3 +7,7 @@ publish/
 publish-*/
 *.zip
 Releases/
+
+## Certificats de signature (ne jamais committer de clé privée)
+*.pfx
+*.p12

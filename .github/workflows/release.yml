@@ -46,15 +46,38 @@ jobs:
 
       - name: Package installer with Velopack
         shell: pwsh
+        env:
+          SIGNING_CERT_PFX_BASE64: ${{ secrets.SIGNING_CERT_PFX_BASE64 }}
+          SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
         run: |
-          vpk pack -u SosLan -v ${{ steps.version.outputs.version }} -p publish -e SosLan.exe `
-            --icon src/SosLan/cloche.ico `
-            --packTitle "SOS-LAN" `
-            --packAuthors "Tomline Prod and Co" `
-            --msi `
-            --instLocation Either `
-            --instLicense installer/CLUF.md `
-            -r win-x64
+          # Signature de code Windows : activée uniquement si les secrets GitHub existent
+          # (voir scripts/Initialize-CodeSigning.ps1). Sans eux, la release reste non signée.
+          $signArgs = @()
+          $pfxPath = Join-Path $PWD "codesign.pfx"
+          if ($env:SIGNING_CERT_PFX_BASE64) {
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:SIGNING_CERT_PFX_BASE64))
+            $signArgs = @("--signParams", "/f `"$pfxPath`" /p `"$env:SIGNING_CERT_PASSWORD`" /fd sha256 /tr http://timestamp.digicert.com /td sha256")
+            Write-Host "Signature de code activée."
+          } else {
+            Write-Host "Aucun certificat configuré : release non signée."
+          }
+
+          try {
+            vpk pack -u SosLan -v ${{ steps.version.outputs.version }} -p publish -e SosLan.exe `
+              --icon src/SosLan/cloche.ico `
+              --packTitle "SOS-LAN" `
+              --packAuthors "Tomline Prod and Co" `
+              --msi `
+              --instLocation Either `
+              --instLicense installer/CLUF.md `
+              -r win-x64 `
+              @signArgs
+          } finally {
+            if (Test-Path $pfxPath) { Remove-Item $pfxPath -Force }
+          }
+
+          # Échec de vpk (dont échec de signature) : on arrête avant de publier quoi que ce soit.
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           # Le Setup.exe one-click n'est pas distribué : seul le MSI l'est.
           # vpk a besoin de le générer pour construire le MSI, mais son
@@ -73,6 +96,13 @@ jobs:
             --tag v${{ steps.version.outputs.version }} `
             --releaseName "SOS-LAN v${{ steps.version.outputs.version }}" `
             --publish
+
+      - name: Attach public signing certificate to the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload v${{ steps.version.outputs.version }} installer/SosLan-codesign.cer --clobber
 
   release-macos:
     needs: release-windows
@@ -104,21 +134,86 @@ jobs:
           }
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
+      # Signature macOS avec le même certificat auto-signé que Windows (secrets GitHub créés par
+      # scripts/Initialize-CodeSigning.ps1). Auto-signé = pas de notarisation Apple, donc
+      # Gatekeeper demande encore une confirmation au premier lancement ; en revanche l'identité
+      # de l'app reste identique d'une version à l'autre, ce qui conserve la permission
+      # Accessibilité (nécessaire à la touche d'alerte) lors des mises à jour.
+      - name: Prepare macOS signing keychain
+        id: signing
+        shell: bash
+        env:
+          SIGNING_CERT_PFX_BASE64: ${{ secrets.SIGNING_CERT_PFX_BASE64 }}
+          SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: |
+          if [ -z "$SIGNING_CERT_PFX_BASE64" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Aucun certificat configuré : paquets macOS non signés."
+            exit 0
+          fi
+
+          KEYCHAIN="$RUNNER_TEMP/soslan-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+
+          echo "$SIGNING_CERT_PFX_BASE64" | base64 --decode > "$RUNNER_TEMP/codesign.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/codesign.p12" -k "$KEYCHAIN" -P "$SIGNING_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/codesign.p12"
+
+          # Un certificat auto-signé n'est utilisable par codesign que s'il est approuvé pour la
+          # signature de code ; le runner étant éphémère, on l'approuve au niveau système.
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain installer/SosLan-codesign.cer
+
+          security find-identity -p codesigning "$KEYCHAIN"
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "keychain=$KEYCHAIN" >> "$GITHUB_OUTPUT"
+
       - name: Publish and package (x64)
         shell: pwsh
         run: |
+          $signArgs = @()
+          if ("${{ steps.signing.outputs.enabled }}" -eq "true") {
+            $signArgs = @("--signAppIdentity", "Tomline Prod and Co", "--keychain", "${{ steps.signing.outputs.keychain }}", "--signEntitlements", "installer/entitlements.plist")
+          }
+
           dotnet publish src/SosLan/SosLan.csproj -c Release -r osx-x64 --self-contained true -p:DebugType=None -o publish-x64
           vpk pack -u SosLan -v ${{ steps.version.outputs.version }} -p publish-x64 -e SosLan `
             --packTitle "SOS-LAN" --packAuthors "Tomline Prod and Co" `
-            -r osx-x64 --channel osx-x64
+            -r osx-x64 --channel osx-x64 `
+            @signArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Publish and package (arm64)
         shell: pwsh
         run: |
+          $signArgs = @()
+          if ("${{ steps.signing.outputs.enabled }}" -eq "true") {
+            $signArgs = @("--signAppIdentity", "Tomline Prod and Co", "--keychain", "${{ steps.signing.outputs.keychain }}", "--signEntitlements", "installer/entitlements.plist")
+          }
+
           dotnet publish src/SosLan/SosLan.csproj -c Release -r osx-arm64 --self-contained true -p:DebugType=None -o publish-arm64
           vpk pack -u SosLan -v ${{ steps.version.outputs.version }} -p publish-arm64 -e SosLan `
             --packTitle "SOS-LAN" --packAuthors "Tomline Prod and Co" `
-            -r osx-arm64 --channel osx-arm64
+            -r osx-arm64 --channel osx-arm64 `
+            @signArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify macOS signatures
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          for arch in x64 arm64; do
+            rm -rf "verify-$arch" && mkdir "verify-$arch"
+            unzip -q "Releases/SosLan-osx-$arch-Portable.zip" -d "verify-$arch"
+            app="$(find "verify-$arch" -maxdepth 3 -name '*.app' | head -n 1)"
+            echo "== $arch : $app =="
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign -dvv "$app" 2>&1 | grep -E "Identifier|Authority|Signature|TeamIdentifier" || true
+          done
 
       - name: Publish release and installers to GitHub
         shell: pwsh
@@ -134,3 +229,10 @@ jobs:
             --tag v${{ steps.version.outputs.version }} `
             --releaseName "SOS-LAN v${{ steps.version.outputs.version }}" `
             --channel osx-arm64 --merge --publish
+
+      - name: Remove signing keychain
+        if: always() && steps.signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          sudo security remove-trusted-cert -d installer/SosLan-codesign.cer || true
+          security delete-keychain "${{ steps.signing.outputs.keychain }}" || true

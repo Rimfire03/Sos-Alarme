@@ -109,6 +109,28 @@ L'application se distribue sous forme d'un paquet Velopack (`SosLan-osx-x64-Setu
 
 Le CLUF ([installer/CLUF.md](installer/CLUF.md)) précise notamment que le Logiciel est la propriété de **Tomline Prod&Co** et qu'**aucun usage commercial n'est autorisé**.
 
+## Signature du code
+
+Les releases sont signées par la CI avec un **certificat auto-signé** « Tomline Prod and Co » (empreinte SHA-1 `1C5219B67511CE1DBFF8069724CB5E53B872349A`), le même pour les deux OS :
+
+- **Windows** : MSI, exécutables et DLL signés (SHA-256, horodatage DigiCert) ;
+- **macOS** : application signée avec ce certificat et les droits de [installer/entitlements.plist](installer/entitlements.plist) (nécessaires au runtime .NET). L'identité de l'app étant identique d'une version à l'autre, macOS **conserve la permission Accessibilité** lors des mises à jour (avec une signature ad hoc, elle serait redemandée à chaque version).
+
+**Limites** : un certificat auto-signé n'est reconnu par aucune autorité. Tant qu'il n'est pas approuvé sur un poste, SmartScreen (Windows) et Gatekeeper (macOS) affichent encore leur avertissement, et l'app n'est pas notarisée par Apple. La signature garantit en revanche l'intégrité et l'origine des fichiers.
+
+**Faire approuver le certificat sur un poste** (le fichier `SosLan-codesign.cer` est joint à chaque release et présent dans [installer/](installer/SosLan-codesign.cer)). Vérifier d'abord l'empreinte ci-dessus, puis :
+
+```bash
+# Windows (PowerShell administrateur) ; en parc, déployer par GPO
+certutil -addstore -f Root SosLan-codesign.cer
+certutil -addstore -f TrustedPublisher SosLan-codesign.cer
+
+# macOS
+sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain SosLan-codesign.cer
+```
+
+**Mise en place / renouvellement** : `scripts/Initialize-CodeSigning.ps1` automatise tout (génère le certificat, enregistre les secrets GitHub `SIGNING_CERT_PFX_BASE64` et `SIGNING_CERT_PASSWORD`, écrit le `.cer` public, sauvegarde la clé hors dépôt dans `%USERPROFILE%\SosLan-signing-backup`). Le relancer crée un nouveau certificat (nouvelle empreinte à faire approuver). Sans ces secrets, la CI continue de produire des releases **non signées**.
+
 ## Releases automatiques
 
 Chaque push sur `main` déclenche deux jobs GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)), un par OS (le job macOS attend que le job Windows ait publié la release pour y ajouter ses propres fichiers) :
