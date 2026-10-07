@@ -215,7 +215,7 @@ jobs:
           for arch in x64 arm64; do
             rm -rf "verify-$arch" && mkdir "verify-$arch"
             unzip -q "Releases/SosLan-osx-$arch-Portable.zip" -d "verify-$arch"
-            app="$(find "verify-$arch" -maxdepth 3 -name '*.app' | head -n 1)"
+            app="$(find "verify-$arch" -maxdepth 3 -name '*.app' -not -path '*__MACOSX*' | head -n 1)"
             echo "== $arch : $app =="
             ls -R "verify-$arch" | head -n 20
             if ! out="$(codesign --verify --deep --strict --verbose=2 "$app" 2>&1)"; then
