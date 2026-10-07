@@ -178,7 +178,7 @@ jobs:
         run: |
           $signArgs = @()
           if ("${{ steps.signing.outputs.enabled }}" -eq "true") {
-            $signArgs = @("--signAppIdentity", "TomLine prod&co", "--keychain", "${{ steps.signing.outputs.keychain }}", "--signEntitlements", "installer/entitlements.plist")
+            $signArgs = @("--signAppIdentity", "TomLine prod&co", "--keychain", "${{ steps.signing.outputs.keychain }}", "--signEntitlements", "installer/SosLan.entitlements")
           }
 
           dotnet publish src/SosLan/SosLan.csproj -c Release -r osx-x64 --self-contained true -p:DebugType=None -o publish-x64
@@ -198,7 +198,7 @@ jobs:
         run: |
           $signArgs = @()
           if ("${{ steps.signing.outputs.enabled }}" -eq "true") {
-            $signArgs = @("--signAppIdentity", "TomLine prod&co", "--keychain", "${{ steps.signing.outputs.keychain }}", "--signEntitlements", "installer/entitlements.plist")
+            $signArgs = @("--signAppIdentity", "TomLine prod&co", "--keychain", "${{ steps.signing.outputs.keychain }}", "--signEntitlements", "installer/SosLan.entitlements")
           }
 
           dotnet publish src/SosLan/SosLan.csproj -c Release -r osx-arm64 --self-contained true -p:DebugType=None -o publish-arm64

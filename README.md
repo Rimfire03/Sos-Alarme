@@ -114,7 +114,7 @@ Le CLUF ([installer/CLUF.md](installer/CLUF.md)) précise notamment que le Logic
 Les releases sont signées par la CI avec le **certificat auto-signé de l'éditeur** « TomLine prod&co » (empreinte SHA-1 `168FFE4B6B2D5E042808B001B5146C6D137F532C`, valable jusqu'au 06/10/2031), le même pour les deux OS **et pour tous les projets de l'éditeur** : les postes ne l'approuvent qu'une fois. La clé privée est archivée dans le dépôt privé `Rimfire03/TomLine-signing-keys` (mot de passe hors dépôt).
 
 - **Windows** : MSI, exécutables et DLL signés (SHA-256, horodatage DigiCert) ;
-- **macOS** : application signée avec ce certificat et les droits de [installer/entitlements.plist](installer/entitlements.plist) (nécessaires au runtime .NET). L'identité de l'app étant identique d'une version à l'autre, macOS **conserve la permission Accessibilité** lors des mises à jour (avec une signature ad hoc, elle serait redemandée à chaque version).
+- **macOS** : application signée avec ce certificat et les droits de [installer/SosLan.entitlements](installer/SosLan.entitlements) (nécessaires au runtime .NET). L'identité de l'app étant identique d'une version à l'autre, macOS **conserve la permission Accessibilité** lors des mises à jour (avec une signature ad hoc, elle serait redemandée à chaque version).
 
 **Limites** : un certificat auto-signé n'est reconnu par aucune autorité. Tant qu'il n'est pas approuvé sur un poste, SmartScreen (Windows) et Gatekeeper (macOS) affichent encore leur avertissement, et l'app n'est pas notarisée par Apple. La signature garantit en revanche l'intégrité et l'origine des fichiers.
 
