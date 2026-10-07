@@ -107,6 +107,7 @@ jobs:
   release-macos:
     needs: release-windows
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -184,8 +185,13 @@ jobs:
           vpk pack -u SosLan -v ${{ steps.version.outputs.version }} -p publish-x64 -e SosLan `
             --packTitle "SOS-LAN" --packAuthors "Tomline Prod and Co" `
             -r osx-x64 --channel osx-x64 `
-            @signArgs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            @signArgs 2>&1 | Tee-Object -FilePath vpk-x64.log
+          if ($LASTEXITCODE -ne 0) {
+            # Les logs complets d'un job macOS échoué sont parfois indisponibles : on les copie en annotation.
+            $tail = (Get-Content vpk-x64.log -Tail 25) -join "%0A"
+            Write-Host "::error title=vpk pack x64::$tail"
+            exit $LASTEXITCODE
+          }
 
       - name: Publish and package (arm64)
         shell: pwsh
@@ -234,5 +240,6 @@ jobs:
         if: always() && steps.signing.outputs.enabled == 'true'
         shell: bash
         run: |
-          sudo security remove-trusted-cert -d installer/TomLine-signature.cer || true
+          # Le runner macOS est éphémère : on retire seulement le trousseau temporaire. Pas de
+          # "remove-trusted-cert" : en session CI il attend une autorisation graphique et bloquait le job.
           security delete-keychain "${{ steps.signing.outputs.keychain }}" || true
