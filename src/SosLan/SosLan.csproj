@@ -8,7 +8,7 @@
     <AssemblyName>SosLan</AssemblyName>
     <RootNamespace>SosLan</RootNamespace>
     <ApplicationIcon>cloche.ico</ApplicationIcon>
-    <Version>1.0.25</Version>
+    <Version>1.0.26</Version>
     <Product>SOS-LAN</Product>
     <Copyright>© Tomline Prod&amp;Co</Copyright>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
@@ -23,6 +23,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
     <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="System.Windows.Extensions" Version="10.0.12" />
     <PackageReference Include="Velopack" Version="1.2.158" />
   </ItemGroup>

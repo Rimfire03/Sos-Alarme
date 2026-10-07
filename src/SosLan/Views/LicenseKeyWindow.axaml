@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SosLan.Views.LicenseKeyWindow"
+        Title="Licence - SOS-LAN"
+        Width="420"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        CanResize="False"
+        ShowInTaskbar="True">
+    <StackPanel Margin="20">
+        <TextBlock x:Name="DescriptionText"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,12" />
+
+        <TextBlock Text="Clé de licence" Margin="0,0,0,4" />
+        <TextBox x:Name="KeyBox" Margin="0,0,0,12" />
+
+        <TextBlock x:Name="ErrorText"
+                   Foreground="Red"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,12" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button x:Name="CancelButton" Content="Quitter" Padding="16,6" Click="OnCancelClick" />
+            <Button x:Name="ActivateButton" Content="Activer" Padding="16,6" Click="OnActivateClick" IsDefault="True" />
+        </StackPanel>
+    </StackPanel>
+</Window>

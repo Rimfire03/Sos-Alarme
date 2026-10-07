@@ -5,6 +5,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using SosLan.Licensing;
 using SosLan.Models;
 using SosLan.Services;
 using SosLan.Views;
@@ -22,6 +23,8 @@ public partial class App : Application
     private DispatcherTimer? _peersRefreshTimer;
     private IHotkeyMonitor? _hotkeyMonitor;
     private NetworkService? _networkService;
+    private LicenseManager _license = null!;
+    private DispatcherTimer? _licenseTimer;
 
     public override void Initialize()
     {
@@ -35,10 +38,49 @@ public partial class App : Application
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             desktop.Exit += (_, _) => Cleanup();
 
-            StartApplication();
+            _ = StartAfterLicenseCheckAsync(desktop);
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Premier test du démarrage : licence gratuite (licence.ini / interrupteur global) ou licence valide.
+    /// Sans licence valide l'application se referme avant d'avoir rien démarré (ni réseau, ni touche surveillée).
+    /// </summary>
+    private async Task StartAfterLicenseCheckAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        try
+        {
+            _license = LicenseManager.Create();
+            if (!await LicenseFlow.EnsureLicensedAsync(_license))
+            {
+                desktop.Shutdown();
+                return;
+            }
+        }
+        catch (Exception)
+        {
+            await MessageWindow.ShowInfo("Licence SOS-LAN",
+                "Impossible de vérifier la licence sur ce poste (identifiant du poste indisponible).");
+            desktop.Shutdown();
+            return;
+        }
+
+        StartApplication();
+
+        if (!_license.IsFree)
+        {
+            _licenseTimer = new DispatcherTimer { Interval = LicenseConfig.RevalidationInterval };
+            _licenseTimer.Tick += async (_, _) =>
+            {
+                if (!await LicenseFlow.RevalidateAsync(_license))
+                {
+                    desktop.Shutdown();
+                }
+            };
+            _licenseTimer.Start();
+        }
     }
 
     private void StartApplication()
@@ -167,7 +209,7 @@ public partial class App : Application
     private Task OpenSettingsAsync()
     {
         var tcs = new TaskCompletionSource();
-        var window = new SettingsWindow(_settings);
+        var window = new SettingsWindow(_settings, _license);
         window.Closed += (_, _) =>
         {
             OnSettingsClosed(window);
@@ -180,6 +222,13 @@ public partial class App : Application
 
     private void OnSettingsClosed(SettingsWindow window)
     {
+        if (window.LicenseRemoved)
+        {
+            // Plus de licence = plus d'accès : l'application se referme.
+            (ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
+            return;
+        }
+
         if (window.Result != null)
         {
             _settings = window.Result;
@@ -257,6 +306,7 @@ public partial class App : Application
     private void Cleanup()
     {
         _peersRefreshTimer?.Stop();
+        _licenseTimer?.Stop();
         _hotkeyMonitor?.Dispose();
         _networkService?.Dispose();
         if (_trayIcon != null)

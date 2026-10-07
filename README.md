@@ -69,6 +69,17 @@ Les paramètres sont stockés par utilisateur dans :
 ~/Library/Application Support/SosLan/settings.json          (macOS)
 ```
 
+## Licence
+
+L'application exige une licence validée par le serveur `https://licences.tlpc.fr` (produit `sos-alarme`). Code commun aux deux OS dans `src/SosLan/Licensing` ; seuls le stockage et l'identifiant machine sont propres à chaque plateforme.
+
+- **Démarrage** : sans licence stockée, une fenêtre demande la clé (`/v1/activate`) ; fermer la fenêtre ferme l'application. Avec une licence stockée, `/v1/validate` est appelé à chaque lancement puis toutes les 24 h ; un refus (révoquée, expirée, poste non activé) efface la licence et ferme l'application.
+- **Grâce hors-ligne** : serveur injoignable et validation réussie existante → utilisable 30 jours après la dernière validation, sans jamais dépasser `expiresAt`. Un refus explicite n'ouvre jamais de grâce.
+- **Un poste = une activation** : `deviceId` = SHA-256 de `MachineGuid` (Windows) ou de `IOPlatformUUID` (macOS), l'identifiant brut n'est jamais envoyé.
+- **Stockage** (aucun fichier) : Windows = `HKCU\Software\TomLine prod&co\SosLan`, valeur unique chiffrée DPAPI ; macOS = Keychain (service `SOS-LAN License`).
+- **Paramètres → Licence** : titulaire, type, expiration, boutons *Changer* / *Supprimer la licence* (désactive le poste puis ferme l'application) et indicateur de mode hors-ligne.
+- **Licence gratuite** (aucun contrôle, aucun appel réseau) : fichier `licence.ini` dans le dossier d'installation, soit la racine Velopack (dossier contenant `Update.exe`, qui survit aux mises à jour) sous Windows, et le dossier qui contient `SOS-LAN.app` sous macOS ; ou constante `LicenseConfig.Enabled = false` ([LicenseConfig.cs](src/SosLan/Licensing/LicenseConfig.cs)) pour une release sans licence.
+
 ## Versionnage automatique
 
 Le numéro de version (`<Version>` dans `src/SosLan/SosLan.csproj`, affiché en bas de la fenêtre Paramètres) est incrémenté automatiquement à chaque commit par un hook Git.

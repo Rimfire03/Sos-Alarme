@@ -2,6 +2,7 @@ using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using SosLan.Licensing;
 using SosLan.Models;
 using SosLan.Services;
 
@@ -12,16 +13,24 @@ public partial class SettingsWindow : Window
     private AppKey _selectedKey;
     private bool _capturingKey;
 
+    private readonly LicenseManager? _license;
+
     public AppSettings? Result { get; private set; }
 
-    public SettingsWindow() : this(new AppSettings())
+    /// <summary>Vrai si la licence a été supprimée depuis cette fenêtre : l'application doit se fermer.</summary>
+    public bool LicenseRemoved { get; private set; }
+
+    public SettingsWindow() : this(new AppSettings(), null)
     {
         // Constructeur sans paramètre requis par le chargeur XAML Avalonia (prévisualiseur).
     }
 
-    public SettingsWindow(AppSettings currentSettings)
+    public SettingsWindow(AppSettings currentSettings, LicenseManager? license)
     {
         InitializeComponent();
+
+        _license = license;
+        RefreshLicenseSection();
 
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
 
@@ -35,6 +44,94 @@ public partial class SettingsWindow : Window
 
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = $"SOS-LAN v{version?.Major}.{version?.Minor}.{version?.Build} — © Tomline Prod&Co";
+    }
+
+    private void RefreshLicenseSection()
+    {
+        LicenseErrorText.Text = "";
+        LicenseOfflineText.Text = "";
+        LicenseDetailText.Text = "";
+
+        if (_license == null || _license.IsFree)
+        {
+            LicenseStatusText.Text = "Licence gratuite";
+            LicenseButtons.IsVisible = false;
+            return;
+        }
+
+        LicenseButtons.IsVisible = true;
+        var info = _license.CurrentLicense;
+        LicenseStatusText.Text = string.IsNullOrWhiteSpace(info?.CustomerName)
+            ? "Licence active"
+            : $"Licence accordée à {info.CustomerName}";
+
+        var details = new List<string>();
+        if (!string.IsNullOrWhiteSpace(info?.Type))
+        {
+            details.Add($"Type : {info.Type}");
+        }
+
+        if (info?.ExpiresAt is { } expiresAt)
+        {
+            details.Add($"Expire le {expiresAt.LocalDateTime:dd/MM/yyyy}");
+        }
+
+        LicenseDetailText.Text = string.Join(" — ", details);
+
+        if (_license.IsOffline && _license.GraceUntil is { } graceUntil)
+        {
+            LicenseOfflineText.Text = $"Mode hors-ligne : serveur de licences injoignable, utilisation autorisée jusqu'au {graceUntil.LocalDateTime:dd/MM/yyyy}.";
+        }
+    }
+
+    private async void OnChangeLicenseClick(object? sender, RoutedEventArgs e)
+    {
+        if (_license == null)
+        {
+            return;
+        }
+
+        var window = new LicenseKeyWindow(
+            "Saisissez la nouvelle clé de licence. L'ancienne licence est conservée tant que la nouvelle n'est pas activée.",
+            "Annuler",
+            _license.ChangeAsync);
+
+        if (await window.ShowAndWaitAsync(this))
+        {
+            RefreshLicenseSection();
+        }
+    }
+
+    private async void OnRemoveLicenseClick(object? sender, RoutedEventArgs e)
+    {
+        if (_license == null)
+        {
+            return;
+        }
+
+        LicenseErrorText.Text = "";
+        var confirmed = await MessageWindow.ShowConfirm("Supprimer la licence",
+            "Supprimer la licence de ce poste ? SOS-LAN se fermera et ne pourra plus être utilisé sans nouvelle licence.");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var removed = await _license.RemoveAsync(deleteEvenIfUnreachable: false);
+        if (!removed)
+        {
+            var force = await MessageWindow.ShowConfirm("Serveur injoignable",
+                "Le serveur de licences est injoignable : le poste ne pourra pas être libéré côté serveur. Supprimer quand même la licence de ce poste ?");
+            if (!force)
+            {
+                return;
+            }
+
+            await _license.RemoveAsync(deleteEvenIfUnreachable: true);
+        }
+
+        LicenseRemoved = true;
+        Close();
     }
 
     private void OnChangeKeyClick(object? sender, RoutedEventArgs e)
