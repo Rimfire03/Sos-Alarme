@@ -165,9 +165,16 @@ public sealed class LicenseManager
 
         if (!response.Valid)
         {
-            return new ActivationResult(false, LicenseMessages.ForReason(response.Reason));
+            // Messages propres à la démo (le serveur répond 403 license_expired / license_revoked pour ce poste).
+            return new ActivationResult(false, response.Reason switch
+            {
+                "license_expired" => "La démo de ce poste est terminée. Saisissez une clé de licence.",
+                "license_revoked" => "Cette démo a été désactivée. Saisissez une clé de licence.",
+                _ => LicenseMessages.ForReason(response.Reason)
+            });
         }
 
+        // 201 (nouvelle démo) et 200 (démo déjà existante, même clé et même échéance) : traités à l'identique.
         var key = response.License?.Key;
         if (string.IsNullOrWhiteSpace(key))
         {
@@ -353,7 +360,6 @@ public static class LicenseMessages
         "license_expired" => "Cette licence a expiré.",
         "activation_limit_reached" => "Le nombre maximal de postes activés pour cette licence est atteint.",
         "device_not_activated" => "Ce poste n'est plus activé pour cette licence.",
-        "demo_already_used" => "Une démo a déjà été utilisée sur ce poste. Saisissez une clé de licence.",
         "product_not_found" => "Ce produit est introuvable sur le serveur de licences.",
         "server_unreachable" or "server_unreachable_no_prior_validation" =>
             "Impossible de joindre le serveur de licences. Vérifiez votre connexion réseau et réessayez.",
