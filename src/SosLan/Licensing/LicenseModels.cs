@@ -13,6 +13,14 @@ public sealed class LicenseInfo
     public int MaxActivations { get; set; }
     public JsonElement? Features { get; set; }
     public string? CustomerName { get; set; }
+
+    /// <summary>Licence d'essai (7 jours à compter de la première activation).</summary>
+    [JsonIgnore]
+    public bool IsDemo => string.Equals(Type, "demo", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>« demo » est traité comme « expiring » : date d'expiration (prolongeable côté serveur).</summary>
+    [JsonIgnore]
+    public bool IsTimeLimited => IsDemo || string.Equals(Type, "expiring", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>Contenu de l'unique élément stocké (chiffré) : jamais écrit en clair.</summary>

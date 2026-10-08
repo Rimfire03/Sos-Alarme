@@ -26,6 +26,12 @@ public static class LicenseFlow
                 return true;
             }
 
+            if (result.Reason == "license_expired")
+            {
+                // La clé stockée est conservée : une prolongation côté serveur la rend à nouveau valide.
+                return await ResolveExpiredAsync(license);
+            }
+
             if (result.Offline)
             {
                 // Serveur injoignable sans grâce restante : la licence stockée est conservée (pas un refus).
@@ -38,10 +44,12 @@ public static class LicenseFlow
             }
         }
 
+        // Licence gratuite exclue plus haut : le bouton de démo n'est proposé qu'ici (aucune licence valide).
         var window = new LicenseKeyWindow(
             "Saisissez votre clé de licence pour utiliser SOS-LAN.",
             "Quitter",
-            license.ActivateAsync);
+            license.ActivateAsync,
+            license.RequestDemoAsync);
 
         return await window.ShowAndWaitAsync();
     }
@@ -60,6 +68,11 @@ public static class LicenseFlow
             return true;
         }
 
+        if (result.Reason == "license_expired")
+        {
+            return await ResolveExpiredAsync(license);
+        }
+
         if (!result.Offline)
         {
             license.ClearStorage();
@@ -67,5 +80,39 @@ public static class LicenseFlow
 
         await MessageWindow.ShowInfo(Title, LicenseMessages.ForReason(result.Reason) + "\n\nL'application va se fermer.");
         return false;
+    }
+
+    /// <summary>
+    /// Écran « Licence expirée » (Réessayer / Saisir une autre licence / Quitter). L'accès reste bloqué tant que
+    /// la licence n'est pas valide ; renvoie false si l'utilisateur quitte.
+    /// </summary>
+    private static async Task<bool> ResolveExpiredAsync(LicenseManager license)
+    {
+        while (true)
+        {
+            var outcome = await new LicenseExpiredWindow(license.RetryStoredAsync).ShowAndWaitAsync();
+
+            switch (outcome)
+            {
+                case ExpiredOutcome.Resolved:
+                    return true;
+
+                case ExpiredOutcome.EnterOtherLicense:
+                    var keyWindow = new LicenseKeyWindow(
+                        "Saisissez une autre clé de licence.",
+                        "Retour",
+                        license.ChangeAsync,
+                        license.RequestDemoAsync);
+                    if (await keyWindow.ShowAndWaitAsync())
+                    {
+                        return true;
+                    }
+
+                    break;
+
+                default:
+                    return false;
+            }
+        }
     }
 }

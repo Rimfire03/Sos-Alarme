@@ -65,18 +65,26 @@ public partial class SettingsWindow : Window
             ? "Licence active"
             : $"Licence accordée à {info.CustomerName}";
 
-        var details = new List<string>();
-        if (!string.IsNullOrWhiteSpace(info?.Type))
+        // Démo : date et jours restants (couleur d'alerte à 2 jours ou moins) ; expiring : date seule ;
+        // perpetual / free : pas de date. La clé n'est jamais affichée.
+        LicenseDetailText.Foreground = Avalonia.Media.Brushes.Gray;
+        if (info is { IsTimeLimited: true, ExpiresAt: { } expiresAt })
         {
-            details.Add($"Type : {info.Type}");
+            var date = expiresAt.LocalDateTime.ToString("dd/MM/yyyy");
+            if (info.IsDemo)
+            {
+                var daysLeft = Math.Max(0, (int)Math.Ceiling((expiresAt - DateTimeOffset.Now).TotalDays));
+                LicenseDetailText.Text = $"Démo — expire le {date} (dans {daysLeft} jour{(daysLeft > 1 ? "s" : "")})";
+                if (daysLeft <= 2)
+                {
+                    LicenseDetailText.Foreground = Avalonia.Media.Brushes.Red;
+                }
+            }
+            else
+            {
+                LicenseDetailText.Text = $"Expire le {date}";
+            }
         }
-
-        if (info?.ExpiresAt is { } expiresAt)
-        {
-            details.Add($"Expire le {expiresAt.LocalDateTime:dd/MM/yyyy}");
-        }
-
-        LicenseDetailText.Text = string.Join(" — ", details);
 
         if (_license.IsOffline && _license.GraceUntil is { } graceUntil)
         {

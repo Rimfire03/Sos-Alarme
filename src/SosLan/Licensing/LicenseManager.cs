@@ -144,6 +144,76 @@ public sealed class LicenseManager
             return new ActivationResult(false, LicenseMessages.ForReason(response.Reason));
         }
 
+        return Store(licenseKey, response.License) ?? new ActivationResult(true, null);
+    }
+
+    /// <summary>
+    /// Demande une démo pour ce poste (aucune saisie de clé). Le serveur l'active directement : la clé reçue est
+    /// stockée telle quelle, sans jamais être affichée, copiée ni journalisée.
+    /// </summary>
+    public async Task<ActivationResult> RequestDemoAsync()
+    {
+        LicenseApiResponse response;
+        try
+        {
+            response = await _api.RequestDemoAsync(_deviceId, _deviceName);
+        }
+        catch (LicenseServerUnreachableException)
+        {
+            return new ActivationResult(false, LicenseMessages.ForReason("server_unreachable"));
+        }
+
+        if (!response.Valid)
+        {
+            return new ActivationResult(false, LicenseMessages.ForReason(response.Reason));
+        }
+
+        var key = response.License?.Key;
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return new ActivationResult(false, "La démo n'a pas pu être activée. Réessayez ou saisissez une clé de licence.");
+        }
+
+        var failure = Store(key, response.License);
+        if (failure != null)
+        {
+            return failure;
+        }
+
+        var message = response.License?.ExpiresAt is { } expiresAt
+            ? $"Démo activée, valable jusqu'au {expiresAt.LocalDateTime:dd/MM/yyyy}."
+            : "Démo activée.";
+        return new ActivationResult(true, message);
+    }
+
+    /// <summary>
+    /// « Réessayer » après une licence expirée : relance /v1/validate ; si le poste n'est plus activé, réactive avec
+    /// la clé stockée (une licence prolongée redevient valide). Nécessite le serveur : pas de grâce hors-ligne ici.
+    /// </summary>
+    public async Task<ActivationResult> RetryStoredAsync()
+    {
+        var result = await CheckStoredAsync();
+        if (result.Valid && !result.Offline)
+        {
+            return new ActivationResult(true, null);
+        }
+
+        if (result.Offline)
+        {
+            return new ActivationResult(false, LicenseMessages.ForReason("server_unreachable"));
+        }
+
+        if (result.Reason == "device_not_activated" && LoadStored() is { } stored)
+        {
+            return await ActivateAsync(stored.LicenseKey);
+        }
+
+        return new ActivationResult(false, LicenseMessages.ForReason(result.Reason));
+    }
+
+    /// <summary>Stocke la licence (dernière validation = maintenant). Renvoie un échec, ou null si tout va bien.</summary>
+    private ActivationResult? Store(string licenseKey, LicenseInfo? license)
+    {
         try
         {
             _storage.Save(Serialize(new StoredLicense
@@ -152,7 +222,7 @@ public sealed class LicenseManager
                 ProductSlug = LicenseConfig.ProductSlug,
                 DeviceId = _deviceId,
                 LastValidatedAt = DateTimeOffset.UtcNow,
-                License = response.License
+                License = license
             }));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or CryptographicException)
@@ -160,8 +230,8 @@ public sealed class LicenseManager
             return new ActivationResult(false, "La licence est valide mais n'a pas pu être enregistrée sur ce poste.");
         }
 
-        SetCurrent(response.License, offline: false, graceUntil: null);
-        return new ActivationResult(true, null);
+        SetCurrent(license, offline: false, graceUntil: null);
+        return null;
     }
 
     /// <summary>
@@ -283,6 +353,8 @@ public static class LicenseMessages
         "license_expired" => "Cette licence a expiré.",
         "activation_limit_reached" => "Le nombre maximal de postes activés pour cette licence est atteint.",
         "device_not_activated" => "Ce poste n'est plus activé pour cette licence.",
+        "demo_already_used" => "Une démo a déjà été utilisée sur ce poste. Saisissez une clé de licence.",
+        "product_not_found" => "Ce produit est introuvable sur le serveur de licences.",
         "server_unreachable" or "server_unreachable_no_prior_validation" =>
             "Impossible de joindre le serveur de licences. Vérifiez votre connexion réseau et réessayez.",
         "offline_grace_expired" =>

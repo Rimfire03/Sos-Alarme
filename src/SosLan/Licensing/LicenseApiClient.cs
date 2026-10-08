@@ -15,6 +15,10 @@ public sealed class LicenseApiClient
     public Task<LicenseApiResponse> ValidateAsync(string licenseKey, string deviceId) =>
         PostForLicenseAsync("/v1/validate", new { licenseKey, productSlug = LicenseConfig.ProductSlug, deviceId });
 
+    /// <summary>Demande une démo pour ce poste : le serveur l'active directement (pas d'appel /v1/activate ensuite).</summary>
+    public Task<LicenseApiResponse> RequestDemoAsync(string deviceId, string deviceName) =>
+        PostForLicenseAsync("/v1/request-demo", new { productSlug = LicenseConfig.ProductSlug, deviceId, deviceName });
+
     /// <summary>Libère le poste. Lève <see cref="LicenseServerUnreachableException"/> si le serveur ne répond pas.</summary>
     public async Task<bool> DeactivateAsync(string licenseKey, string deviceId)
     {

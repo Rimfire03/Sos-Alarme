@@ -20,6 +20,14 @@
                    TextWrapping="Wrap"
                    Margin="0,0,0,12" />
 
+        <Button x:Name="DemoButton"
+                Content="Demander une démo (7 jours)"
+                Padding="16,6"
+                HorizontalAlignment="Left"
+                Margin="0,0,0,12"
+                IsVisible="False"
+                Click="OnDemoClick" />
+
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
             <Button x:Name="CancelButton" Content="Quitter" Padding="16,6" Click="OnCancelClick" />
             <Button x:Name="ActivateButton" Content="Activer" Padding="16,6" Click="OnActivateClick" IsDefault="True" />
