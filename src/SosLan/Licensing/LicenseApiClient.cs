@@ -26,6 +26,30 @@ public sealed class LicenseApiClient
         return json.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True;
     }
 
+    /// <summary>
+    /// Signale le poste en mode bypass (licence.ini) et renvoie l'ordre éventuel (« remove_bypass » ou null).
+    /// Ne contient jamais de clé de licence. customerName n'est envoyé que s'il est exploitable.
+    /// </summary>
+    public async Task<string?> BypassPingAsync(string deviceId, string deviceName, string? customerName)
+    {
+        object body = customerName == null
+            ? new { productSlug = LicenseConfig.ProductSlug, deviceId, deviceName }
+            : new { productSlug = LicenseConfig.ProductSlug, deviceId, deviceName, customerName };
+        var json = await PostAsync("/v1/bypass/ping", body);
+        if (json.ValueKind == JsonValueKind.Object
+            && json.TryGetProperty("command", out var command)
+            && command.ValueKind == JsonValueKind.String)
+        {
+            return command.GetString();
+        }
+
+        return null;
+    }
+
+    /// <summary>Informe le serveur que licence.ini a été supprimé sur son ordre.</summary>
+    public Task BypassRemovedAsync(string deviceId) =>
+        PostAsync("/v1/bypass/removed", new { productSlug = LicenseConfig.ProductSlug, deviceId });
+
     private async Task<LicenseApiResponse> PostForLicenseAsync(string path, object body)
     {
         var json = await PostAsync(path, body);

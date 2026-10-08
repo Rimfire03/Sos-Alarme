@@ -69,17 +69,58 @@ public partial class App : Application
 
         StartApplication();
 
-        if (!_license.IsFree)
+        if (LicenseConfig.Enabled)
         {
+            // Toutes les 24 h : revalidation (licence normale) ou ping du mode bypass (licence.ini).
             _licenseTimer = new DispatcherTimer { Interval = LicenseConfig.RevalidationInterval };
-            _licenseTimer.Tick += async (_, _) =>
-            {
-                if (!await LicenseFlow.RevalidateAsync(_license))
-                {
-                    desktop.Shutdown();
-                }
-            };
+            _licenseTimer.Tick += async (_, _) => await RunLicenseCycleAsync(desktop);
             _licenseTimer.Start();
+
+            // Ping de démarrage en arrière-plan : ne retarde ni ne bloque rien.
+            if (_license.IsFree)
+            {
+                _ = RunLicenseCycleAsync(desktop);
+            }
+        }
+    }
+
+    private bool _licenseCycleRunning;
+
+    private async Task RunLicenseCycleAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        if (_licenseCycleRunning)
+        {
+            return;
+        }
+
+        _licenseCycleRunning = true;
+        try
+        {
+            var stillLicensed = true;
+            if (_license.IsFree)
+            {
+                if (await _license.PingBypassAsync() == "remove_bypass")
+                {
+                    stillLicensed = await LicenseFlow.HandleRemoveBypassAsync(_license);
+                }
+            }
+            else
+            {
+                stillLicensed = await LicenseFlow.RevalidateAsync(_license);
+            }
+
+            if (!stillLicensed)
+            {
+                desktop.Shutdown();
+            }
+        }
+        catch (Exception)
+        {
+            // Aucune erreur visible : le prochain cycle réessaiera.
+        }
+        finally
+        {
+            _licenseCycleRunning = false;
         }
     }
 

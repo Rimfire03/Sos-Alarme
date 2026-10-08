@@ -39,6 +39,12 @@ public sealed class LicenseApiResponse
     public bool Valid { get; set; }
     public string? Reason { get; set; }
     public LicenseInfo? License { get; set; }
+
+    /// <summary>Ordres du serveur (validate) : vide ou contenant « install_bypass ».</summary>
+    public List<string>? Commands { get; set; }
+
+    /// <summary>Nom du client pour licence.ini, présent avec « install_bypass » (peut être null).</summary>
+    public string? BypassName { get; set; }
 }
 
 /// <summary>Résultat d'un contrôle (port de checkLicense du client de référence).</summary>

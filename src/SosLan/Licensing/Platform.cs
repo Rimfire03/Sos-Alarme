@@ -39,6 +39,14 @@ public static class LicensePlatform
     /// </summary>
     public static string GetInstallDirectory()
     {
+#if DEBUG
+        // Uniquement dans les builds de développement : permet de tester avec un dossier dédié (ex. lecture seule).
+        var overrideDir = Environment.GetEnvironmentVariable("SOSLAN_INSTALL_DIR");
+        if (!string.IsNullOrWhiteSpace(overrideDir))
+        {
+            return overrideDir;
+        }
+#endif
         var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
         if (IsWindows)

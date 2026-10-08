@@ -54,7 +54,9 @@ public partial class SettingsWindow : Window
 
         if (_license == null || _license.IsFree)
         {
-            LicenseStatusText.Text = "Licence gratuite";
+            LicenseStatusText.Text = string.IsNullOrWhiteSpace(_license?.FreeName)
+                ? "Licence gratuite"
+                : $"Licence gratuite — {_license.FreeName}";
             LicenseButtons.IsVisible = false;
             return;
         }

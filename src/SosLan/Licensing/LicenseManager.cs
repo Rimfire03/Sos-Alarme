@@ -14,19 +14,27 @@ public sealed record ActivationResult(bool Success, string? Message);
 public sealed class LicenseManager
 {
     private readonly LicenseApiClient _api = new();
-    private readonly ILicenseStorage _storage;
-    private readonly string _deviceId;
+    private ILicenseStorage _storage;
+    private string? _deviceIdValue;
     private readonly string _deviceName = Environment.MachineName;
 
-    private LicenseManager(ILicenseStorage storage, string deviceId, bool isFree)
+    private LicenseManager(ILicenseStorage storage, string? deviceId, bool isFree)
     {
         _storage = storage;
-        _deviceId = deviceId;
+        _deviceIdValue = deviceId;
         IsFree = isFree;
     }
 
-    /// <summary>Licence gratuite : interrupteur global désactivé ou licence.ini présent. Aucun contrôle ni appel réseau.</summary>
-    public bool IsFree { get; }
+    /// <summary>Identifiant du poste (haché). En mode gratuit il n'est calculé qu'à la demande (ping), jamais au démarrage.</summary>
+    private string _deviceId => _deviceIdValue ??= ComputeDeviceId(LicensePlatform.CreateMachineIdProvider().GetRawMachineId());
+
+    /// <summary>Licence gratuite : interrupteur global désactivé ou licence.ini présent. Aucun contrôle de licence.</summary>
+    public bool IsFree { get; private set; }
+
+    /// <summary>Nom du client lu dans licence.ini (ou reçu via bypassName) ; null si aucun. Seul contenu affiché.</summary>
+    public string? FreeName { get; private set; }
+
+    private static string FreeFilePath => Path.Combine(LicensePlatform.GetInstallDirectory(), LicenseConfig.FreeLicenseFileName);
 
     public LicenseInfo? CurrentLicense { get; private set; }
 
@@ -41,9 +49,9 @@ public sealed class LicenseManager
     /// </summary>
     public static LicenseManager Create()
     {
-        if (!LicenseConfig.Enabled || File.Exists(Path.Combine(LicensePlatform.GetInstallDirectory(), LicenseConfig.FreeLicenseFileName)))
+        if (!LicenseConfig.Enabled || File.Exists(FreeFilePath))
         {
-            return new LicenseManager(new NullStorage(), "", isFree: true);
+            return new LicenseManager(new NullStorage(), null, isFree: true);
         }
 
         var deviceId = ComputeDeviceId(LicensePlatform.CreateMachineIdProvider().GetRawMachineId());
@@ -89,6 +97,12 @@ public sealed class LicenseManager
             };
             TrySave(updated);
             SetCurrent(response.License, offline: false, graceUntil: null);
+
+            if (response.Commands?.Contains("install_bypass") == true)
+            {
+                await InstallBypassAsync(response.BypassName);
+            }
+
             return new LicenseCheckResult(true, false, null, response.License, null);
         }
 
@@ -298,6 +312,155 @@ public sealed class LicenseManager
         CurrentLicense = null;
         IsOffline = false;
         GraceUntil = null;
+    }
+
+    // ----- Bypass licence.ini piloté à distance -----
+
+    private const int MaxNameLength = 120;
+
+    /// <summary>
+    /// Ordre « install_bypass » : crée licence.ini puis passe immédiatement en licence gratuite (sans redémarrage).
+    /// Échec d'écriture (droits...) : ignoré en silence, licence normale conservée, nouvel essai au prochain contrôle.
+    /// La licence stockée n'est pas effacée : elle est ignorée tant que licence.ini existe.
+    /// </summary>
+    private async Task InstallBypassAsync(string? bypassName)
+    {
+        var name = CleanName(bypassName);
+        try
+        {
+            var path = FreeFilePath;
+            if (!File.Exists(path))
+            {
+                var nl = Environment.NewLine;
+                var content = "[licence]" + nl + (name != null ? "name=" + name + nl : "") + "type=free" + nl;
+                File.WriteAllText(path, content, new UTF8Encoding(false));
+            }
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        IsFree = true;
+        FreeName = name;
+        IsOffline = false;
+        GraceUntil = null;
+
+        await PingBypassAsync(readFile: false);
+    }
+
+    /// <summary>
+    /// Ping best-effort du mode bypass (au démarrage, puis toutes les 24 h). Ne bloque jamais, ignore toute erreur.
+    /// Renvoie l'ordre du serveur (« remove_bypass ») ou null. Aucun appel si l'interrupteur global est désactivé.
+    /// </summary>
+    public async Task<string?> PingBypassAsync(bool readFile = true)
+    {
+        if (!LicenseConfig.Enabled || !IsFree)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (readFile)
+            {
+                var read = await Task.Run(() => ReadFreeName(FreeFilePath));
+                if (read != null)
+                {
+                    FreeName = read;
+                }
+            }
+
+            return await _api.BypassPingAsync(_deviceId, _deviceName, FreeName);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Ordre « remove_bypass » : supprime licence.ini. Succès : prévient le serveur (best-effort) et quitte le mode
+    /// gratuit (le flux normal de licence reprend). Échec (fichier verrouillé, droits) : rien d'autre, réessai au ping suivant.
+    /// </summary>
+    public async Task<bool> RemoveBypassAsync()
+    {
+        try
+        {
+            var path = FreeFilePath;
+            File.Delete(path);
+            if (File.Exists(path))
+            {
+                return false;
+            }
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        try
+        {
+            await _api.BypassRemovedAsync(_deviceId);
+        }
+        catch (Exception)
+        {
+            // Au mieux : le serveur renverra de nouveau l'ordre ou l'administrateur constatera l'état.
+        }
+
+        if (_storage is NullStorage)
+        {
+            _storage = LicensePlatform.CreateStorage();
+        }
+
+        IsFree = false;
+        FreeName = null;
+        return true;
+    }
+
+    /// <summary>Extrait le nom du client d'un licence.ini : « name=... » sinon première ligne de texte libre. Jamais d'exception.</summary>
+    public static string? ReadFreeName(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var buffer = new byte[8192];
+            var count = stream.Read(buffer, 0, buffer.Length);
+            return ParseFreeName(new UTF8Encoding(false, true).GetString(buffer, 0, count));
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public static string? ParseFreeName(string text)
+    {
+        var lines = text.TrimStart('﻿').Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+
+        foreach (var line in lines)
+        {
+            var eq = line.IndexOf('=');
+            if (eq > 0 && line[..eq].Trim().Equals("name", StringComparison.OrdinalIgnoreCase))
+            {
+                return CleanName(line[(eq + 1)..]);
+            }
+        }
+
+        var free = lines.FirstOrDefault(l => l[0] is not ('[' or ';' or '#') && !l.Contains('='));
+        return CleanName(free);
+    }
+
+    /// <summary>Nettoie un nom : trim, 120 caractères max ; null s'il est vide ou contient des caractères de contrôle.</summary>
+    private static string? CleanName(string? name)
+    {
+        name = name?.Trim();
+        if (string.IsNullOrEmpty(name) || name.Any(char.IsControl))
+        {
+            return null;
+        }
+
+        return name.Length > MaxNameLength ? name[..MaxNameLength].TrimEnd() : name;
     }
 
     // ----- Utilitaires -----
