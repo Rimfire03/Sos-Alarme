@@ -7,7 +7,7 @@ namespace SosLan.Services;
 
 public static class SettingsService
 {
-    private static readonly string FolderPath = PlatformServices.IsMacOS
+    internal static readonly string FolderPath =PlatformServices.IsMacOS
         ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Library", "Application Support", "SosLan")
         : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SosLan");
 

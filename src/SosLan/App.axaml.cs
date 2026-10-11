@@ -50,6 +50,24 @@ public partial class App : Application
     /// </summary>
     private async Task StartAfterLicenseCheckAsync(IClassicDesktopStyleApplicationLifetime desktop)
     {
+        // CLUF : montré dès qu'il diffère de la version acceptée (les mises à jour automatiques n'affichent pas
+        // celui de l'installateur). Refus = fermeture avant tout le reste.
+        var eulaText = EulaService.LoadText();
+        if (eulaText.Length > 0)
+        {
+            var eulaHash = EulaService.ComputeHash(eulaText);
+            if (!EulaService.IsAccepted(eulaHash))
+            {
+                if (!await new EulaWindow(eulaText).ShowAndWaitAsync())
+                {
+                    desktop.Shutdown();
+                    return;
+                }
+
+                EulaService.MarkAccepted(eulaHash);
+            }
+        }
+
         try
         {
             _license = LicenseManager.Create();

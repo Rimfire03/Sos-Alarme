@@ -8,7 +8,7 @@
     <AssemblyName>SosLan</AssemblyName>
     <RootNamespace>SosLan</RootNamespace>
     <ApplicationIcon>cloche.ico</ApplicationIcon>
-    <Version>1.0.30</Version>
+    <Version>1.0.31</Version>
     <Product>SOS-LAN</Product>
     <Copyright>© Tomline Prod&amp;Co</Copyright>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="cloche.ico" LogicalName="SosLan.cloche.ico" />
+    <EmbeddedResource Include="..\..\installer\CLUF.md" LogicalName="SosLan.CLUF.md" />
   </ItemGroup>
 
   <ItemGroup>

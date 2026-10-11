@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SosLan.Views.EulaWindow"
+        Title="Contrat de licence - SOS-LAN"
+        Width="640"
+        Height="560"
+        MinWidth="420"
+        MinHeight="360"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="True">
+    <DockPanel Margin="20">
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,12" Foreground="Gray"
+                       Text="Vous devez accepter ce contrat de licence pour utiliser SOS-LAN." />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Refuser et quitter" Padding="16,6" Click="OnDeclineClick" />
+                <Button Content="J'accepte" Padding="16,6" Click="OnAcceptClick" IsDefault="True" />
+            </StackPanel>
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Top" Text="Contrat de licence utilisateur final" FontSize="16"
+                   FontWeight="SemiBold" Margin="0,0,0,10" />
+
+        <Border BorderBrush="Gray" BorderThickness="1" Padding="10">
+            <ScrollViewer>
+                <TextBlock x:Name="EulaText" TextWrapping="Wrap" />
+            </ScrollViewer>
+        </Border>
+    </DockPanel>
+</Window>
