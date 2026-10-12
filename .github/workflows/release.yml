@@ -6,6 +6,12 @@ on:
 
 permissions:
   contents: write
+  packages: read
+
+# Jeton de lecture du paquet prive TomLine.Licensing (GitHub Packages, voir nuget.config).
+# Le depot doit avoir l'acces en lecture au paquet (Package settings > Manage Actions access).
+env:
+  TOMLINE_NUGET_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   release-windows:

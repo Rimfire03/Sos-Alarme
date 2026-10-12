@@ -1,22 +1,25 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
+using TomLine.Licensing;
 
 namespace SosLan.Licensing;
 
 public sealed record ActivationResult(bool Success, string? Message);
 
 /// <summary>
-/// Logique de licence commune à Windows et macOS : activation, validation, grâce hors-ligne (port de
-/// client/licenseClient.js), suppression/changement. Les parties dépendantes de la plateforme
-/// (stockage, identifiant machine) sont injectées.
+/// Façade de licence de SOS-LAN, commune à Windows et macOS : conserve l'API et les messages existants ; la validation,
+/// la grâce hors-ligne, les réponses signées et les ordres à distance sont portés par le paquet partagé TomLine.Licensing.
+/// Les parties dépendantes de la plateforme (stockage, identifiant machine, licence.ini) sont injectées par adaptateurs.
 /// </summary>
 public sealed class LicenseManager
 {
-    private readonly LicenseApiClient _api = new();
     private ILicenseStorage _storage;
     private string? _deviceIdValue;
     private readonly string _deviceName = Environment.MachineName;
+
+    private LicenseClient? _client;
+    private LicenseService? _service;
+    private SosLanLicenseStore? _store;
 
     private LicenseManager(ILicenseStorage storage, string? deviceId, bool isFree)
     {
@@ -62,75 +65,106 @@ public sealed class LicenseManager
     public static string ComputeDeviceId(string rawMachineId) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawMachineId))).ToLowerInvariant();
 
-    public bool HasStoredLicense => LoadStored() != null;
+    // ----- Composition du système partagé (créé à la demande) -----
+
+    private LicenseOptions BuildOptions() => new()
+    {
+        ProductSlug = LicenseConfig.ProductSlug,
+        StoreName = "SosLan",   // non utilisé : le stockage est celui de SOS-LAN (SosLanLicenseStore)
+        BaseUrl = LicenseConfig.ServerUrl,
+        // Clé publique du serveur de licences (vérification seule). Un faux serveur de développement (build DEBUG avec
+        // SOSLAN_LICENSE_URL) ne signe pas : la signature n'est exigée que pour le serveur de production.
+        PublicKeys = new[] { LicenseConfig.ServerPublicKey },
+        RequireSignature = LicenseConfig.RequireSignedResponses,
+        OfflineGrace = TimeSpan.FromDays(LicenseConfig.GraceDays),
+        // Un refus (licence expirée...) ne supprime pas la licence : le flux d'écrans décide (voir LicenseFlow) ;
+        // seules « révoquée » et « introuvable » l'effacent d'emblée.
+        KeepLicenseOnRecoverableRefusal = true
+    };
+
+    private LicenseService Service
+    {
+        get
+        {
+            if (_service != null)
+            {
+                return _service;
+            }
+
+            var device = new SosLanDeviceIdentity();
+            _client = new LicenseClient(BuildOptions());
+            _store = new SosLanLicenseStore(_storage, _deviceId);
+            _service = new LicenseService(_client, device, _store, new SosLanBypassFile());
+            return _service;
+        }
+    }
+
+    private LicenseClient Client
+    {
+        get
+        {
+            _ = Service;
+            return _client!;
+        }
+    }
+
+    private SosLanLicenseStore Store
+    {
+        get
+        {
+            _ = Service;
+            return _store!;
+        }
+    }
+
+    public bool HasStoredLicense => Store.LoadRaw() != null;
 
     // ----- Contrôle (port de checkLicense) -----
 
     /// <summary>Valide en ligne la licence stockée ; si le serveur est injoignable, applique la grâce hors-ligne.</summary>
     public async Task<LicenseCheckResult> CheckStoredAsync()
     {
-        var stored = LoadStored();
-        if (stored == null)
+        if (Store.LoadRaw() == null)
         {
             return new LicenseCheckResult(false, false, "no_license", null, null);
         }
 
-        LicenseApiResponse response;
-        try
+        var state = await Service.RevalidateAsync();
+        switch (state.Status)
         {
-            response = await _api.ValidateAsync(stored.LicenseKey, _deviceId);
+            case LicenseStatus.Valid:
+                SetCurrent(state.License, offline: false, graceUntil: null);
+                return new LicenseCheckResult(true, false, null, CurrentLicense, null);
+
+            case LicenseStatus.OfflineGrace:
+                SetCurrent(state.License, offline: true, graceUntil: state.GraceUntil);
+                return new LicenseCheckResult(true, true, null, state.License is { } g ? SosLanLicenseStore.ToInfo(g) : null, state.GraceUntil);
+
+            case LicenseStatus.Bypass:
+                // Ordre « install_bypass » exécuté par le service : licence gratuite immédiatement, sans redémarrage.
+                IsFree = true;
+                FreeName = ReadFreeName(FreeFilePath);
+                IsOffline = false;
+                GraceUntil = null;
+                return new LicenseCheckResult(true, false, null, CurrentLicense, null);
+
+            case LicenseStatus.NoLicense:
+                return new LicenseCheckResult(false, false, "no_license", null, null);
+
+            default:
+                return LockedResult(state);
         }
-        catch (LicenseServerUnreachableException)
-        {
-            return CheckOfflineGrace(stored);
-        }
-
-        if (response.Valid)
-        {
-            var updated = new StoredLicense
-            {
-                LicenseKey = stored.LicenseKey,
-                ProductSlug = LicenseConfig.ProductSlug,
-                DeviceId = _deviceId,
-                LastValidatedAt = DateTimeOffset.UtcNow,
-                License = response.License
-            };
-            TrySave(updated);
-            SetCurrent(response.License, offline: false, graceUntil: null);
-
-            if (response.Commands?.Contains("install_bypass") == true)
-            {
-                await InstallBypassAsync(response.BypassName);
-            }
-
-            return new LicenseCheckResult(true, false, null, response.License, null);
-        }
-
-        // Refus explicite (révoquée, expirée, poste non activé...) : réponse ferme, jamais de grâce.
-        return new LicenseCheckResult(false, false, response.Reason, null, null);
     }
 
-    private LicenseCheckResult CheckOfflineGrace(StoredLicense stored)
+    private static LicenseCheckResult LockedResult(LicenseState state) => state.Reason switch
     {
-        if (stored.ProductSlug != LicenseConfig.ProductSlug || stored.DeviceId != _deviceId)
-        {
-            return new LicenseCheckResult(false, true, "server_unreachable_no_prior_validation", null, null);
-        }
-
-        var deadline = stored.LastValidatedAt.AddDays(LicenseConfig.GraceDays);
-        if (stored.License?.ExpiresAt is { } expiresAt && expiresAt < deadline)
-        {
-            deadline = expiresAt;
-        }
-
-        if (DateTimeOffset.UtcNow <= deadline)
-        {
-            SetCurrent(stored.License, offline: true, graceUntil: deadline);
-            return new LicenseCheckResult(true, true, null, stored.License, deadline);
-        }
-
-        return new LicenseCheckResult(false, true, "offline_grace_expired", null, null);
-    }
+        // Pas de réponse du serveur : jamais un refus de licence (la licence stockée est conservée).
+        "no_prior_validation" => new LicenseCheckResult(false, true, "server_unreachable_no_prior_validation", null, null),
+        "offline_grace_expired" => new LicenseCheckResult(false, true, "offline_grace_expired", null, null),
+        "clock_tampered" => new LicenseCheckResult(false, true, "clock_tampered", null, null),
+        // Refus explicite (révoquée, expirée, poste non activé...) : réponse ferme, jamais de grâce.
+        _ => new LicenseCheckResult(false, false, state.Reason, null, null)
+    };
 
     // ----- Activation / changement / suppression -----
 
@@ -143,22 +177,13 @@ public sealed class LicenseManager
             return new ActivationResult(false, "Saisissez votre clé de licence.");
         }
 
-        LicenseApiResponse response;
-        try
+        var state = await Service.ActivateAsync(licenseKey);
+        if (state.Status != LicenseStatus.Valid)
         {
-            response = await _api.ActivateAsync(licenseKey, _deviceId, _deviceName);
-        }
-        catch (LicenseServerUnreachableException)
-        {
-            return new ActivationResult(false, LicenseMessages.ForReason("server_unreachable"));
+            return new ActivationResult(false, LicenseMessages.ForReason(MapNetwork(state.Reason)));
         }
 
-        if (!response.Valid)
-        {
-            return new ActivationResult(false, LicenseMessages.ForReason(response.Reason));
-        }
-
-        return Store(licenseKey, response.License) ?? new ActivationResult(true, null);
+        return Stored(state.License) ?? new ActivationResult(true, null);
     }
 
     /// <summary>
@@ -167,41 +192,26 @@ public sealed class LicenseManager
     /// </summary>
     public async Task<ActivationResult> RequestDemoAsync()
     {
-        LicenseApiResponse response;
-        try
-        {
-            response = await _api.RequestDemoAsync(_deviceId, _deviceName);
-        }
-        catch (LicenseServerUnreachableException)
-        {
-            return new ActivationResult(false, LicenseMessages.ForReason("server_unreachable"));
-        }
-
-        if (!response.Valid)
+        var state = await Service.RequestDemoAsync();
+        if (state.Status != LicenseStatus.Valid)
         {
             // Messages propres à la démo (le serveur répond 403 license_expired / license_revoked pour ce poste).
-            return new ActivationResult(false, response.Reason switch
+            return new ActivationResult(false, state.Reason switch
             {
                 "license_expired" => "La démo de ce poste est terminée. Saisissez une clé de licence.",
                 "license_revoked" => "Cette démo a été désactivée. Saisissez une clé de licence.",
-                _ => LicenseMessages.ForReason(response.Reason)
+                "invalid_response" => "La démo n'a pas pu être activée. Réessayez ou saisissez une clé de licence.",
+                _ => LicenseMessages.ForReason(MapNetwork(state.Reason))
             });
         }
 
-        // 201 (nouvelle démo) et 200 (démo déjà existante, même clé et même échéance) : traités à l'identique.
-        var key = response.License?.Key;
-        if (string.IsNullOrWhiteSpace(key))
-        {
-            return new ActivationResult(false, "La démo n'a pas pu être activée. Réessayez ou saisissez une clé de licence.");
-        }
-
-        var failure = Store(key, response.License);
+        var failure = Stored(state.License);
         if (failure != null)
         {
             return failure;
         }
 
-        var message = response.License?.ExpiresAt is { } expiresAt
+        var message = state.License?.ExpiresAt is { } expiresAt
             ? $"Démo activée, valable jusqu'au {expiresAt.LocalDateTime:dd/MM/yyyy}."
             : "Démo activée.";
         return new ActivationResult(true, message);
@@ -224,7 +234,7 @@ public sealed class LicenseManager
             return new ActivationResult(false, LicenseMessages.ForReason("server_unreachable"));
         }
 
-        if (result.Reason == "device_not_activated" && LoadStored() is { } stored)
+        if (result.Reason == "device_not_activated" && Store.LoadRaw() is { } stored)
         {
             return await ActivateAsync(stored.LicenseKey);
         }
@@ -232,21 +242,10 @@ public sealed class LicenseManager
         return new ActivationResult(false, LicenseMessages.ForReason(result.Reason));
     }
 
-    /// <summary>Stocke la licence (dernière validation = maintenant). Renvoie un échec, ou null si tout va bien.</summary>
-    private ActivationResult? Store(string licenseKey, LicenseInfo? license)
+    /// <summary>Enregistre la licence de la session. Renvoie un échec si elle n'a pas pu être persistée, sinon null.</summary>
+    private ActivationResult? Stored(TomLine.Licensing.StoredLicense? license)
     {
-        try
-        {
-            _storage.Save(Serialize(new StoredLicense
-            {
-                LicenseKey = licenseKey,
-                ProductSlug = LicenseConfig.ProductSlug,
-                DeviceId = _deviceId,
-                LastValidatedAt = DateTimeOffset.UtcNow,
-                License = license
-            }));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or CryptographicException)
+        if (Store.LastSaveFailed)
         {
             return new ActivationResult(false, "La licence est valide mais n'a pas pu être enregistrée sur ce poste.");
         }
@@ -255,22 +254,24 @@ public sealed class LicenseManager
         return null;
     }
 
+    private static string? MapNetwork(string? reason) => reason == "network" ? "server_unreachable" : reason;
+
     /// <summary>
     /// Remplace la licence : la nouvelle clé est d'abord activée ; seulement en cas de succès l'ancienne est
     /// désactivée côté serveur. En cas d'échec, l'ancienne licence reste intacte.
     /// </summary>
     public async Task<ActivationResult> ChangeAsync(string newLicenseKey)
     {
-        var previous = LoadStored();
+        var previous = Store.LoadRaw();
         var result = await ActivateAsync(newLicenseKey);
 
         if (result.Success && previous != null && !string.Equals(previous.LicenseKey, newLicenseKey.Trim(), StringComparison.Ordinal))
         {
             try
             {
-                await _api.DeactivateAsync(previous.LicenseKey, _deviceId);
+                await Client.DeactivateAsync(previous.LicenseKey, _deviceId);
             }
-            catch (LicenseServerUnreachableException)
+            catch (LicenseNetworkException)
             {
                 // Au mieux : la nouvelle licence est déjà active, l'ancienne activation sera libérée par l'administrateur.
             }
@@ -285,14 +286,14 @@ public sealed class LicenseManager
     /// </summary>
     public async Task<bool> RemoveAsync(bool deleteEvenIfUnreachable)
     {
-        var stored = LoadStored();
+        var stored = Store.LoadRaw();
         if (stored != null)
         {
             try
             {
-                await _api.DeactivateAsync(stored.LicenseKey, _deviceId);
+                await Client.DeactivateAsync(stored.LicenseKey, _deviceId);
             }
-            catch (LicenseServerUnreachableException)
+            catch (LicenseNetworkException)
             {
                 if (!deleteEvenIfUnreachable)
                 {
@@ -319,37 +320,6 @@ public sealed class LicenseManager
     private const int MaxNameLength = 120;
 
     /// <summary>
-    /// Ordre « install_bypass » : crée licence.ini puis passe immédiatement en licence gratuite (sans redémarrage).
-    /// Échec d'écriture (droits...) : ignoré en silence, licence normale conservée, nouvel essai au prochain contrôle.
-    /// La licence stockée n'est pas effacée : elle est ignorée tant que licence.ini existe.
-    /// </summary>
-    private async Task InstallBypassAsync(string? bypassName)
-    {
-        var name = CleanName(bypassName);
-        try
-        {
-            var path = FreeFilePath;
-            if (!File.Exists(path))
-            {
-                var nl = Environment.NewLine;
-                var content = "[licence]" + nl + (name != null ? "name=" + name + nl : "") + "type=free" + nl;
-                File.WriteAllText(path, content, new UTF8Encoding(false));
-            }
-        }
-        catch (Exception)
-        {
-            return;
-        }
-
-        IsFree = true;
-        FreeName = name;
-        IsOffline = false;
-        GraceUntil = null;
-
-        await PingBypassAsync(readFile: false);
-    }
-
-    /// <summary>
     /// Ping best-effort du mode bypass (au démarrage, puis toutes les 24 h). Ne bloque jamais, ignore toute erreur.
     /// Renvoie l'ordre du serveur (« remove_bypass ») ou null. Aucun appel si l'interrupteur global est désactivé.
     /// </summary>
@@ -371,7 +341,8 @@ public sealed class LicenseManager
                 }
             }
 
-            return await _api.BypassPingAsync(_deviceId, _deviceName, FreeName);
+            var reply = await Client.BypassPingAsync(_deviceId, _deviceName, FreeName);
+            return reply.Command;
         }
         catch (Exception)
         {
@@ -401,7 +372,7 @@ public sealed class LicenseManager
 
         try
         {
-            await _api.BypassRemovedAsync(_deviceId);
+            await Client.BypassRemovedAsync(_deviceId);
         }
         catch (Exception)
         {
@@ -413,6 +384,10 @@ public sealed class LicenseManager
             _storage = LicensePlatform.CreateStorage();
         }
 
+        // Le service est recomposé avec le vrai stockage au prochain besoin (état « gratuit » abandonné).
+        _service = null;
+        _client = null;
+        _store = null;
         IsFree = false;
         FreeName = null;
         return true;
@@ -452,7 +427,7 @@ public sealed class LicenseManager
     }
 
     /// <summary>Nettoie un nom : trim, 120 caractères max ; null s'il est vide ou contient des caractères de contrôle.</summary>
-    private static string? CleanName(string? name)
+    internal static string? CleanName(string? name)
     {
         name = name?.Trim();
         if (string.IsNullOrEmpty(name) || name.Any(char.IsControl))
@@ -465,45 +440,12 @@ public sealed class LicenseManager
 
     // ----- Utilitaires -----
 
-    private void SetCurrent(LicenseInfo? license, bool offline, DateTimeOffset? graceUntil)
+    private void SetCurrent(TomLine.Licensing.StoredLicense? license, bool offline, DateTimeOffset? graceUntil)
     {
-        CurrentLicense = license;
+        CurrentLicense = license == null ? null : SosLanLicenseStore.ToInfo(license);
         IsOffline = offline;
         GraceUntil = graceUntil;
     }
-
-    private StoredLicense? LoadStored()
-    {
-        var raw = _storage.Load();
-        if (string.IsNullOrEmpty(raw))
-        {
-            return null;
-        }
-
-        try
-        {
-            var stored = JsonSerializer.Deserialize<StoredLicense>(raw, LicenseJson.Options);
-            return stored == null || string.IsNullOrWhiteSpace(stored.LicenseKey) ? null : stored;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private void TrySave(StoredLicense stored)
-    {
-        try
-        {
-            _storage.Save(Serialize(stored));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or CryptographicException)
-        {
-            // La validation reste acquise pour cette session ; la date de dernière validation ne sera pas rafraîchie.
-        }
-    }
-
-    private static string Serialize(StoredLicense stored) => JsonSerializer.Serialize(stored, LicenseJson.Options);
 
     private sealed class NullStorage : ILicenseStorage
     {
@@ -528,6 +470,8 @@ public static class LicenseMessages
             "Impossible de joindre le serveur de licences. Vérifiez votre connexion réseau et réessayez.",
         "offline_grace_expired" =>
             $"Le serveur de licences est injoignable et la période d'utilisation hors-ligne ({LicenseConfig.GraceDays} jours) est dépassée. Connectez-vous au réseau pour revalider la licence.",
+        "clock_tampered" =>
+            "L'horloge de ce poste est en retard sur la dernière validation de la licence. Corrigez l'heure du poste et connectez-vous au réseau.",
         _ => "La licence a été refusée par le serveur."
     };
 }

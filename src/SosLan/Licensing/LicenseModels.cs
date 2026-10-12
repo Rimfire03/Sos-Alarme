@@ -30,21 +30,11 @@ public sealed class StoredLicense
     public string ProductSlug { get; set; } = "";
     public string DeviceId { get; set; } = "";
     public DateTimeOffset LastValidatedAt { get; set; }
+
+    /// <summary>Plus grand instant observé (serveur ou horloge locale) : détection d'un retour en arrière de l'horloge.</summary>
+    public DateTimeOffset? LastSeenAt { get; set; }
+
     public LicenseInfo? License { get; set; }
-}
-
-/// <summary>Réponse brute du serveur pour activate / validate.</summary>
-public sealed class LicenseApiResponse
-{
-    public bool Valid { get; set; }
-    public string? Reason { get; set; }
-    public LicenseInfo? License { get; set; }
-
-    /// <summary>Ordres du serveur (validate) : vide ou contenant « install_bypass ».</summary>
-    public List<string>? Commands { get; set; }
-
-    /// <summary>Nom du client pour licence.ini, présent avec « install_bypass » (peut être null).</summary>
-    public string? BypassName { get; set; }
 }
 
 /// <summary>Résultat d'un contrôle (port de checkLicense du client de référence).</summary>
@@ -63,13 +53,4 @@ public static class LicenseJson
         PropertyNameCaseInsensitive = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-}
-
-/// <summary>Le serveur de licences n'a pas répondu (réseau, délai dépassé, erreur 5xx, réponse illisible).</summary>
-public sealed class LicenseServerUnreachableException : Exception
-{
-    public LicenseServerUnreachableException(Exception? inner = null)
-        : base("Serveur de licences injoignable.", inner)
-    {
-    }
 }

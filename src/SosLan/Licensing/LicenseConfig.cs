@@ -23,6 +23,14 @@ public static class LicenseConfig
 
     public static readonly TimeSpan RevalidationInterval = TimeSpan.FromHours(24);
 
+    public const string ProductionServerUrl = "https://licences.tlpc.fr";
+
+    /// <summary>Clé publique ECDSA P-256 du serveur de licences (vérification seule, sans danger dans le dépôt).</summary>
+    public const string ServerPublicKey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjairPbdPQuYiWSJ6MtVo6xchepZYn9h+JFdSI72MNzuVwmFgTCiYBRuPHJBJT45eC+qloOQbBWZDSZSkZxttvQ==";
+
+    /// <summary>Les réponses du serveur de production doivent être signées ; un faux serveur de développement (DEBUG) ne signe pas.</summary>
+    public static bool RequireSignedResponses => ServerUrl == ProductionServerUrl;
+
     public static string ServerUrl
     {
         get
@@ -35,7 +43,7 @@ public static class LicenseConfig
                 return overrideUrl.TrimEnd('/');
             }
 #endif
-            return "https://licences.tlpc.fr";
+            return ProductionServerUrl;
         }
     }
 }
