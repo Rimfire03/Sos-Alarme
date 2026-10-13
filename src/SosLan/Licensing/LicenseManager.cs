@@ -119,6 +119,13 @@ public sealed class LicenseManager
 
     public bool HasStoredLicense => Store.LoadRaw() != null;
 
+    /// <summary>Informations client demandées par le serveur (null si rien, ou en licence gratuite).</summary>
+    public ProfileRequest? ProfileRequest => IsFree ? null : _service?.ProfileRequest;
+
+    /// <summary>Envoie les informations client au serveur de licences (licence stockée de ce poste).</summary>
+    public Task<(bool Done, string? Reason, IReadOnlyList<string> Fields)> SubmitProfileAsync(DemoRequestProfile profile) =>
+        Service.SubmitProfileAsync(profile);
+
     // ----- Contrôle (port de checkLicense) -----
 
     /// <summary>Valide en ligne la licence stockée ; si le serveur est injoignable, applique la grâce hors-ligne.</summary>

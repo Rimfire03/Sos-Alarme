@@ -87,6 +87,9 @@ public partial class App : Application
 
         StartApplication();
 
+        // Informations client demandées par le serveur : jamais bloquant, une fois par lancement, jamais en licence.ini.
+        _ = LicenseProfilePrompt.ShowIfRequiredAsync(_license);
+
         if (LicenseConfig.Enabled)
         {
             // Toutes les 24 h : revalidation (licence normale) ou ping du mode bypass (licence.ini).
@@ -130,6 +133,10 @@ public partial class App : Application
             if (!stillLicensed)
             {
                 desktop.Shutdown();
+            }
+            else if (!_license.IsFree)
+            {
+                _ = LicenseProfilePrompt.ShowIfRequiredAsync(_license);
             }
         }
         catch (Exception)
