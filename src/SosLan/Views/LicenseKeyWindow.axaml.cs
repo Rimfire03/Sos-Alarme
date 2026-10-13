@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using SosLan.Licensing;
+using TomLine.Licensing;
 
 namespace SosLan.Views;
 
@@ -12,7 +13,8 @@ namespace SosLan.Views;
 public partial class LicenseKeyWindow : Window
 {
     private readonly Func<string, Task<ActivationResult>> _activate = _ => Task.FromResult(new ActivationResult(false, null));
-    private readonly Func<Task<ActivationResult>>? _requestDemo;
+    private readonly Func<DemoRequestProfile, Task<ActivationResult>>? _requestDemo;
+    private DemoRequestProfile? _demoProfile;
     private bool _success;
     private bool _busy;
 
@@ -22,7 +24,7 @@ public partial class LicenseKeyWindow : Window
     }
 
     public LicenseKeyWindow(string description, string cancelText, Func<string, Task<ActivationResult>> activate,
-        Func<Task<ActivationResult>>? requestDemo = null) : this()
+        Func<DemoRequestProfile, Task<ActivationResult>>? requestDemo = null) : this()
     {
         _activate = activate;
         _requestDemo = requestDemo;
@@ -36,10 +38,20 @@ public partial class LicenseKeyWindow : Window
 
     private async void OnDemoClick(object? sender, RoutedEventArgs e)
     {
-        if (_requestDemo != null)
+        if (_requestDemo == null || _busy)
         {
-            await RunAsync(_requestDemo);
+            return;
         }
+
+        // Formulaire du demandeur (civilité, nom, e-mail...) : envoyé au serveur et enregistré avec la démo.
+        var profile = await new DemoRequestWindow(_demoProfile).ShowDialog<DemoRequestProfile?>(this);
+        if (profile == null)
+        {
+            return;
+        }
+
+        _demoProfile = profile;
+        await RunAsync(() => _requestDemo(profile));
     }
 
     private async Task RunAsync(Func<Task<ActivationResult>> action)

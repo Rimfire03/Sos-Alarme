@@ -190,9 +190,9 @@ public sealed class LicenseManager
     /// Demande une démo pour ce poste (aucune saisie de clé). Le serveur l'active directement : la clé reçue est
     /// stockée telle quelle, sans jamais être affichée, copiée ni journalisée.
     /// </summary>
-    public async Task<ActivationResult> RequestDemoAsync()
+    public async Task<ActivationResult> RequestDemoAsync(DemoRequestProfile profile)
     {
-        var state = await Service.RequestDemoAsync();
+        var state = await Service.RequestDemoAsync(profile);
         if (state.Status != LicenseStatus.Valid)
         {
             // Messages propres à la démo (le serveur répond 403 license_expired / license_revoked pour ce poste).
