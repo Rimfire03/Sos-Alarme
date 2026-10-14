@@ -119,6 +119,9 @@ public sealed class LicenseManager
 
     public bool HasStoredLicense => Store.LoadRaw() != null;
 
+    /// <summary>Ligne Â« Postes : 2/5 Â» (ou Â« 1/âˆž Â») de la licence en cours, ou null quand le serveur ne l'a pas renvoyÃ©e.</summary>
+    public string? PostsLine => IsFree ? null : LicenseFooter.PostsLine(_service?.State.License);
+
     /// <summary>Informations client demandées par le serveur (null si rien, ou en licence gratuite).</summary>
     public ProfileRequest? ProfileRequest => IsFree ? null : _service?.ProfileRequest;
 
@@ -187,10 +190,18 @@ public sealed class LicenseManager
         var state = await Service.ActivateAsync(licenseKey);
         if (state.Status != LicenseStatus.Valid)
         {
+            // Limite de postes atteinte avec compteur : Â« Limite atteinte : 2/2 postes utilisÃ©s Â».
+            if (state.Reason == "activation_limit_reached" && state.ActivationsText is not null)
+            {
+                return new ActivationResult(false, LicenseReasons.DescribeRefusal(state));
+            }
+
             return new ActivationResult(false, LicenseMessages.ForReason(MapNetwork(state.Reason)));
         }
 
-        return Stored(state.License) ?? new ActivationResult(true, null);
+        // Compteur de postes connu : Â« Licence activÃ©e (poste 2/5) Â» ; sinon aucun message (comportement inchangÃ©).
+        return Stored(state.License)
+            ?? new ActivationResult(true, state.License?.ActivationsText is not null ? LicenseFooter.ActivationMessage(state) : null);
     }
 
     /// <summary>

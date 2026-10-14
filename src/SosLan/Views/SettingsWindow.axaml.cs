@@ -88,6 +88,12 @@ public partial class SettingsWindow : Window
             }
         }
 
+        // Compteur de postes (Â« Postes : 2/5 Â») : seulement quand le serveur l'a renvoyÃ©.
+        if (_license.PostsLine is { } posts)
+        {
+            LicenseDetailText.Text = string.IsNullOrEmpty(LicenseDetailText.Text) ? posts : LicenseDetailText.Text + "\n" + posts;
+        }
+
         if (_license.IsOffline && _license.GraceUntil is { } graceUntil)
         {
             LicenseOfflineText.Text = $"Mode hors-ligne : serveur de licences injoignable, utilisation autorisée jusqu'au {graceUntil.LocalDateTime:dd/MM/yyyy}.";
