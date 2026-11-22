@@ -14,7 +14,33 @@ env:
   TOMLINE_NUGET_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
+  # Pas de release si la version du csproj a deja ete publiee (commit sans bump : doc, PR GitHub...) :
+  # sinon "vpk upload" echoue sur le tag existant et la CI passe au rouge.
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      needed: ${{ steps.check.outputs.needed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check whether this version is already released
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(grep -oP '<Version>\K[0-9.]+' src/SosLan/SosLan.csproj | head -n 1)
+          if gh release view "v$version" --repo "${{ github.repository }}" > /dev/null 2>&1; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Release ignoree::La version v$version est deja publiee (aucun changement de version) : rien a publier."
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   release-windows:
+    needs: check-version
+    if: needs.check-version.outputs.needed == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout
