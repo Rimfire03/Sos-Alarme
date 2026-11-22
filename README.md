@@ -1,5 +1,7 @@
 # SOS-LAN
 
+[![Release](https://img.shields.io/github/v/release/Rimfire03/Sos-Alarme)](https://github.com/Rimfire03/Sos-Alarme/releases/latest) [![Téléchargements](https://img.shields.io/github/downloads/Rimfire03/Sos-Alarme/total)](https://github.com/Rimfire03/Sos-Alarme/releases) [![Release build](https://img.shields.io/github/actions/workflow/status/Rimfire03/Sos-Alarme/release.yml)](https://github.com/Rimfire03/Sos-Alarme/actions/workflows/release.yml) ![.NET 8](https://img.shields.io/badge/.NET-8-512BD4?logo=dotnet&logoColor=white) ![Avalonia](https://img.shields.io/badge/UI-Avalonia-8B44AC) ![Plateformes](https://img.shields.io/badge/plateformes-Windows%20%7C%20macOS-555)
+
 Application **Windows et macOS** (.NET 8, UI [Avalonia](https://avaloniaui.net/)) qui tourne réduite dans la zone de notification et permet de déclencher une alerte sonore et visuelle sur tous les postes du réseau local qui l'exécutent.
 
 ## Fonctionnement
